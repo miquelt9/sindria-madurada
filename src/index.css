@@ -1,0 +1,99 @@
+@import '@fontsource/fraunces/600.css';
+@import '@fontsource/fraunces/800.css';
+@import '@fontsource/dm-sans/400.css';
+@import '@fontsource/dm-sans/500.css';
+@import '@fontsource/dm-sans/600.css';
+@import '@fontsource/dm-sans/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-surface: #FBF6EE;
+  --color-surface-raised: #FFFFFF;
+  --color-surface-subtle: #F3ECE1;
+  --color-ink: #1A2E22;
+  --color-muted: #5C6F62;
+  --color-border: #D9E4D6;
+
+  --color-primary: #1B7A3D;
+  --color-primary-hover: #156633;
+  --color-primary-fg: #FFFFFF;
+
+  --color-accent: #E11D48;
+  --color-accent-hover: #BE123C;
+  --color-accent-fg: #FFFFFF;
+
+  --color-spot: #C4920A;
+  --color-spot-hover: #A17706;
+  --color-spot-fg: #1A2E22;
+
+  --color-ripe: #1B7A3D;
+  --color-ripe-bg: rgba(27, 122, 61, 0.12);
+  --color-ripe-border: rgba(27, 122, 61, 0.35);
+
+  --color-unripe: #E11D48;
+  --color-unripe-bg: rgba(225, 29, 72, 0.12);
+  --color-unripe-border: rgba(225, 29, 72, 0.35);
+
+  --color-borderline: #C4920A;
+  --color-borderline-bg: rgba(196, 146, 10, 0.14);
+  --color-borderline-border: rgba(196, 146, 10, 0.35);
+
+  --radius-card: 1.25rem;
+  --radius-pill: 9999px;
+  --shadow-card: 0 4px 20px -2px rgba(26, 46, 34, 0.08), 0 2px 6px -1px rgba(26, 46, 34, 0.04);
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-ui: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+.dark {
+  --color-surface: #0C1F14;
+  --color-surface-raised: #163024;
+  --color-surface-subtle: #11281B;
+  --color-ink: #E8F5E9;
+  --color-muted: #8BA394;
+  --color-border: #1F3D2C;
+
+  --color-primary: #3DCC6A;
+  --color-primary-hover: #4FE07D;
+  --color-primary-fg: #052E16;
+
+  --color-accent: #FB7185;
+  --color-accent-hover: #FDA4AF;
+  --color-accent-fg: #4C0519;
+
+  --color-spot: #FACC15;
+  --color-spot-hover: #FDE047;
+  --color-spot-fg: #1A2E22;
+
+  --color-ripe: #3DCC6A;
+  --color-ripe-bg: rgba(61, 204, 106, 0.16);
+  --color-ripe-border: rgba(61, 204, 106, 0.4);
+
+  --color-unripe: #FB7185;
+  --color-unripe-bg: rgba(251, 113, 133, 0.16);
+  --color-unripe-border: rgba(251, 113, 133, 0.4);
+
+  --color-borderline: #FACC15;
+  --color-borderline-bg: rgba(250, 204, 21, 0.16);
+  --color-borderline-border: rgba(250, 204, 21, 0.4);
+
+  --shadow-card: 0 8px 30px -4px rgba(0, 0, 0, 0.5), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#root {
+  width: 100%;
+}

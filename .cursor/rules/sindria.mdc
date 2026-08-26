@@ -1,0 +1,20 @@
+---
+description: Development rules and architectural guidelines for Sindria Madurada watermelon ripeness PWA
+globs: **/*
+alwaysApply: true
+---
+
+# Sindria Madurada Rules
+
+- **Framework**: Vite + React (TypeScript) + Tailwind CSS + Lucide Icons.
+- **Design System & Theming**:
+  - Use semantic watermelon tokens (`bg-surface`, `bg-surface-raised`, `bg-surface-subtle`, `text-ink`, `text-ink-muted`, `border-border`, `bg-primary`, `bg-spot`, `bg-accent`, `text-ripe`, `text-unripe`, `text-borderline`).
+  - Do NOT hardcode arbitrary `slate-*` / `emerald-*` color classes in new UI components.
+  - Support Light / Dark / System themes through `ThemeProvider`, `useTheme()`, and standard Tailwind `dark:` / token classes.
+  - Typography: Use `font-display` (Fraunces) for titles/scores and standard sans (DM Sans) for UI/body.
+  - Interactive targets: Ensure all touch buttons have a minimum touch target of 44x44px.
+  - Class merging: Always use `cn(...)` from `src/lib/cn.ts` for dynamic className props.
+- **Client Processing**: Use Web Audio API (`AnalyserNode` / `AudioContext`) for live knock signal FFT analysis and Canvas API (`ImageData`) for client-side visual feature extraction.
+- **Offline & Storage**: Store scan records (photo thumbnail, audio features, visual scores, feedback) in browser `IndexedDB`.
+- **Honesty in AI/Heuristics**: Provide explainable sub-scores (Ribbon/Stripe contrast, Field spot yellowness, Surface dullness, Acoustic resonant band) and express the final decision as `Likely Ripe`, `Unsure / Borderline`, or `Likely Unripe`.
+- **Mobile-First UX**: Responsive UI with touch-friendly controls, camera capture overlay, live mic volume/FFT feedback, and haptic feedback triggers where supported.

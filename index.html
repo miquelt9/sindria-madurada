@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/watermelon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#15803d" />
+    <meta name="description" content="Detector de maduresa de síndria mitjançant foto i acústica de cops" />
+    <title>Síndria Madurada</title>
+    <script>
+      (function() {
+        try {
+          var key = 'sindria-theme';
+          var saved = localStorage.getItem(key);
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = saved === 'dark' || (saved !== 'light' && prefersDark);
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', '#0C1F14');
+          } else {
+            document.documentElement.classList.remove('dark');
+            var metaLight = document.querySelector('meta[name="theme-color"]');
+            if (metaLight) metaLight.setAttribute('content', '#FBF6EE');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="bg-surface text-ink min-h-screen antialiased select-none">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
