@@ -383,9 +383,10 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
 
       {/* Variety & Size Selector Chips (always accessible for fast grocery tweaking) */}
       <Card variant="subtle" className="w-full p-2.5 space-y-2">
-        <div className="flex items-center justify-between gap-2">
+        {/* Stack below 360px so three size chips stay ≥44px beside the app-shell padding. */}
+        <div className="flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-stretch">
           {/* Variety Chip Group */}
-          <div className="flex-1 space-y-1">
+          <div className="w-full min-w-0 space-y-1 min-[360px]:flex-1">
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider block px-1">
               {t('varietyLabel')}
             </span>
@@ -394,7 +395,7 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
                 type="button"
                 onClick={() => handleVarietyChange('striped')}
                 className={cn(
-                  'min-h-[36px] px-2 py-1 text-xs font-bold rounded-lg border transition-all',
+                  'touch-target w-full px-2 text-xs font-bold leading-tight rounded-lg border transition-all text-center',
                   variety === 'striped'
                     ? 'bg-primary text-primary-fg border-primary shadow-xs'
                     : 'bg-surface-raised border-border text-ink-muted hover:text-ink'
@@ -406,7 +407,7 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
                 type="button"
                 onClick={() => handleVarietyChange('solid')}
                 className={cn(
-                  'min-h-[36px] px-2 py-1 text-xs font-bold rounded-lg border transition-all',
+                  'touch-target w-full px-2 text-xs font-bold leading-tight rounded-lg border transition-all text-center',
                   variety === 'solid'
                     ? 'bg-primary text-primary-fg border-primary shadow-xs'
                     : 'bg-surface-raised border-border text-ink-muted hover:text-ink'
@@ -418,7 +419,7 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
           </div>
 
           {/* Size Chip Group */}
-          <div className="flex-1 space-y-1">
+          <div className="w-full min-w-0 space-y-1 min-[360px]:flex-1">
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider block px-1">
               {t('sizeLabel')}
             </span>
@@ -429,7 +430,7 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
                   type="button"
                   onClick={() => handleSizeChange(s)}
                   className={cn(
-                    'min-h-[36px] px-1 py-1 text-xs font-bold rounded-lg border transition-all text-center',
+                    'touch-target w-full px-1 text-xs font-bold rounded-lg border transition-all text-center',
                     size === s
                       ? 'bg-spot text-spot-fg border-spot shadow-xs'
                       : 'bg-surface-raised border-border text-ink-muted hover:text-ink'
@@ -586,16 +587,16 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
           )}
 
           <Card variant="default" className="p-3 space-y-3">
-            <div className="flex justify-between items-center px-1">
+            <div className="flex flex-wrap justify-between items-center gap-2 px-1">
               <h3 className="text-xs font-bold text-ink flex items-center gap-1.5">
                 {mode === 'center_crop' ? t('cropStepRind') : t('cropStepBelly')}
               </h3>
-              <div className="flex space-x-1">
+              <div className="flex shrink-0 gap-1">
                 <button
                   type="button"
                   onClick={() => setMode('center_crop')}
                   className={cn(
-                    'min-h-[34px] text-xs px-3 py-1 rounded-lg font-bold transition',
+                    'touch-target shrink-0 text-xs px-3 rounded-lg font-bold transition',
                     mode === 'center_crop'
                       ? 'bg-primary text-primary-fg'
                       : 'bg-surface-subtle text-ink-muted hover:text-ink'
@@ -607,7 +608,7 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
                   type="button"
                   onClick={() => setMode('mark_spot')}
                   className={cn(
-                    'min-h-[34px] text-xs px-3 py-1 rounded-lg font-bold transition flex items-center space-x-1',
+                    'touch-target shrink-0 text-xs px-3 rounded-lg font-bold transition inline-flex items-center gap-1',
                     mode === 'mark_spot'
                       ? 'bg-spot text-spot-fg'
                       : 'bg-surface-subtle text-ink-muted hover:text-ink'
