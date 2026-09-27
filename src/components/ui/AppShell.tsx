@@ -1,6 +1,8 @@
 import React from 'react';
 import { History, Sparkles } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { ScanStepper } from './ScanStepper';
+import { isScanFlowStep } from './scanStepperState';
 import { useI18n } from '../../i18n';
 import { cn } from '../../lib/cn';
 
@@ -70,6 +72,8 @@ export const AppShell: React.FC<AppShellProps> = ({
           </button>
         </div>
       </header>
+
+      {isScanFlowStep(currentStep) && <ScanStepper currentStep={currentStep} />}
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col justify-center py-2">{children}</main>

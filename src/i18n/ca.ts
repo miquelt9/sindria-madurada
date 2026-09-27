@@ -12,6 +12,10 @@ export const ca: Translations = {
   delete: 'Eliminar',
   clearAll: 'Esborrar tot',
   offlineNotice: 'Sense connexió. Funciona 100% en local.',
+  scanStepperLabel: "Progrés de l'anàlisi",
+  scanStepPhoto: 'Foto',
+  scanStepKnock: 'Cops',
+  scanStepResult: 'Resultat',
 
   // Landing Page
   landingTagline: 'Comprova la maduresa de la síndria amb la càmera i el so dels teus cops.',

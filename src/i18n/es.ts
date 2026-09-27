@@ -12,6 +12,10 @@ export const es: Translations = {
   delete: 'Eliminar',
   clearAll: 'Borrar todo',
   offlineNotice: 'Sin conexión. Funciona 100% en local.',
+  scanStepperLabel: 'Progreso del análisis',
+  scanStepPhoto: 'Foto',
+  scanStepKnock: 'Golpes',
+  scanStepResult: 'Resultado',
 
   // Landing Page
   landingTagline: 'Comprueba la madurez de la sandía con la cámara y el sonido de tus golpes.',
