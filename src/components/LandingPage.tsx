@@ -85,19 +85,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartScan, onOpenHis
   return (
     <div className="w-full max-w-md mx-auto space-y-5 animate-in fade-in pb-10">
       {/* Language Switcher Bar */}
-      <div className="flex items-center justify-between px-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <div className="flex items-center gap-1.5 text-xs text-ink-muted">
           <Globe className="w-3.5 h-3.5" />
           <span className="font-semibold uppercase tracking-wider text-[10px]">Idioma / Language</span>
         </div>
-        <div className="flex items-center bg-surface-raised border border-border rounded-xl p-0.5 shadow-sm">
+        <div className="flex shrink-0 items-center bg-surface-raised border border-border rounded-xl p-0.5 shadow-sm">
           {languages.map((item) => (
             <button
               key={item.code}
               type="button"
               onClick={() => setLanguage(item.code)}
               className={cn(
-                'min-w-[44px] min-h-[34px] px-2.5 py-1 text-xs font-bold rounded-lg transition-colors',
+                'touch-target inline-flex shrink-0 items-center justify-center px-2.5 text-xs font-bold rounded-lg transition-colors',
                 language === item.code
                   ? 'bg-primary text-primary-fg shadow-sm'
                   : 'text-ink-muted hover:text-ink'
