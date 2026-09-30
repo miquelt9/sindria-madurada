@@ -12,6 +12,10 @@ export const en: Translations = {
   delete: 'Delete',
   clearAll: 'Clear all',
   offlineNotice: 'Offline mode. 100% on-device.',
+  scanStepperLabel: 'Scan progress',
+  scanStepPhoto: 'Photo',
+  scanStepKnock: 'Knock',
+  scanStepResult: 'Result',
 
   // Landing Page
   landingTagline: 'Check watermelon ripeness with your camera and knuckle-knock acoustics.',

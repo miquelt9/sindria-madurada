@@ -12,6 +12,10 @@ export interface Translations {
   delete: string;
   clearAll: string;
   offlineNotice: string;
+  scanStepperLabel: string;
+  scanStepPhoto: string;
+  scanStepKnock: string;
+  scanStepResult: string;
 
   // Landing Page
   landingTagline: string;

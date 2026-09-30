@@ -6,6 +6,7 @@ export * from './ScoreRing';
 export * from './ProgressDots';
 export * from './EmptyState';
 export * from './AppShell';
+export * from './ScanStepper';
 export * from './ThemeProvider';
 export * from './ThemeToggle';
 export * from './ErrorBoundary';
