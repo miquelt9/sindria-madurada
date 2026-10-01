@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Volume2, Hand } from 'lucide-react';
+import { Mic, MicOff, Volume2, Hand, ArrowLeft } from 'lucide-react';
 import { KnockRecorder } from '../lib/audio/recorder';
 import { AudioFeatures } from '../lib/types';
 import { Button, Card, ProgressDots } from './ui';
@@ -9,6 +9,8 @@ import { cn } from '../lib/cn';
 interface KnockRecorderViewProps {
   onKnockComplete: (features: AudioFeatures) => void;
   onSkipKnock?: () => void;
+  /** Return to Photo. Stops the knock session and discards partial knocks. */
+  onBack?: () => void;
 }
 
 const FLAT_MIC_RMS = 0.0012;
@@ -17,6 +19,7 @@ const FLAT_MIC_DELAY_MS = 2000;
 export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
   onKnockComplete,
   onSkipKnock,
+  onBack,
 }) => {
   const { t } = useI18n();
   const [isRecording, setIsRecording] = useState(false);
@@ -31,6 +34,7 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const onKnockCompleteRef = useRef(onKnockComplete);
   const finishingRef = useRef(false);
+  const abandonedRef = useRef(false);
   const finishTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatMicTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeLockRef = useRef<any>(null);
@@ -69,7 +73,7 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
   };
 
   const handleFinish = useCallback(() => {
-    if (finishingRef.current) return;
+    if (finishingRef.current || abandonedRef.current) return;
     const recorder = recorderRef.current;
     if (!recorder) return;
     finishingRef.current = true;
@@ -111,9 +115,33 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
     return () => {
       clearTimers();
       void releaseWakeLock();
+      recorder.onKnockDetected = undefined;
+      recorder.onVolumeUpdate = undefined;
+      recorder.onSpectrumUpdate = undefined;
       recorder.stopAndAnalyze();
     };
   }, [releaseWakeLock]);
+
+  const handleBack = () => {
+    if (!onBack || abandonedRef.current) return;
+    abandonedRef.current = true;
+    finishingRef.current = true;
+    clearTimers();
+    void releaseWakeLock();
+    const recorder = recorderRef.current;
+    if (recorder) {
+      recorder.onKnockDetected = undefined;
+      recorder.onVolumeUpdate = undefined;
+      recorder.onSpectrumUpdate = undefined;
+      recorder.stopAndAnalyze();
+    }
+    setIsRecording(false);
+    setKnockCount(0);
+    setVolume(0);
+    setLiveRms(0);
+    setMicHint(null);
+    onBack();
+  };
 
   const drawSpectrum = (data: Uint8Array) => {
     const canvas = canvasRef.current;
@@ -191,6 +219,21 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
 
   return (
     <div className="flex flex-col items-center w-full max-w-md mx-auto space-y-5 animate-in fade-in pb-6">
+      {onBack && (
+        <div className="w-full flex items-center px-1">
+          <Button
+            type="button"
+            onClick={handleBack}
+            variant="secondary"
+            size="md"
+            className="touch-target min-w-[44px] gap-1.5"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>{t('back')}</span>
+          </Button>
+        </div>
+      )}
+
       <div className="text-center space-y-1">
         <h2 className="text-xl font-bold text-ink font-display">{t('knockTitle')}</h2>
         <p className="text-xs text-ink-muted max-w-xs">

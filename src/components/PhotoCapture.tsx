@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import {
   Camera,
   Image as ImageIcon,
@@ -18,17 +18,30 @@ import { validateWatermelonImage, WatermelonGateResult } from '../lib/vision/wat
 import { MelonVariety, MelonSize } from '../lib/types';
 import { cn } from '../lib/cn';
 
+/** Crop-editor state so Knock → Photo can reopen the existing framing screen. */
+export interface PhotoFraming {
+  rindImage: string;
+  bellyImage?: string;
+  cropBox: { x: number; y: number; size: number };
+  groundSpotPoint?: { x: number; y: number };
+  variety: MelonVariety;
+  size: MelonSize;
+}
+
 export interface PhotoCaptureResult {
   photoDataUrl: string;
   groundSpotPoint?: { x: number; y: number };
   bellyPhotoDataUrl?: string;
   variety: MelonVariety;
   size: MelonSize;
+  framing: PhotoFraming;
 }
 
 interface PhotoCaptureProps {
   onPhotoCropped: (result: PhotoCaptureResult) => void;
   onBack?: () => void;
+  /** Preserved capture when returning from Knock. Omit on a fresh photo step. */
+  initialFraming?: PhotoFraming | null;
 }
 
 type CaptureTarget = 'rind' | 'belly';
@@ -36,29 +49,35 @@ type CaptureTarget = 'rind' | 'belly';
 const VARIETY_STORAGE_KEY = 'sindria.variety';
 const SIZE_STORAGE_KEY = 'sindria.size';
 
-export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBack }) => {
+export const PhotoCapture: React.FC<PhotoCaptureProps> = ({
+  onPhotoCropped,
+  onBack,
+  initialFraming = null,
+}) => {
   const { t } = useI18n();
+  const restoredRind = initialFraming?.rindImage ?? null;
 
   // Target being captured (rind photo or optional belly photo)
   const [target, setTarget] = useState<CaptureTarget>('rind');
 
-  // Captured images
-  const [capturedRindImage, setCapturedRindImage] = useState<string | null>(null);
-  const [capturedBellyImage, setCapturedBellyImage] = useState<string | null>(null);
+  // Captured images. A restored framing reopens the existing crop editor.
+  const [capturedRindImage, setCapturedRindImage] = useState<string | null>(restoredRind);
+  const [capturedBellyImage, setCapturedBellyImage] = useState<string | null>(
+    initialFraming?.bellyImage ?? null
+  );
 
   // Crop & Ground spot tap
-  const [cropBox, setCropBox] = useState<{ x: number; y: number; size: number }>({
-    x: 0.2,
-    y: 0.2,
-    size: 0.6,
-  });
+  const [cropBox, setCropBox] = useState<{ x: number; y: number; size: number }>(
+    initialFraming?.cropBox ?? { x: 0.2, y: 0.2, size: 0.6 }
+  );
   const [groundSpotPoint, setGroundSpotPoint] = useState<{ x: number; y: number } | undefined>(
-    undefined
+    initialFraming?.groundSpotPoint
   );
   const [mode, setMode] = useState<'center_crop' | 'mark_spot'>('center_crop');
 
   // Variety & Size chips
   const [variety, setVariety] = useState<MelonVariety>(() => {
+    if (initialFraming?.variety) return initialFraming.variety;
     try {
       const saved = localStorage.getItem(VARIETY_STORAGE_KEY);
       if (saved === 'striped' || saved === 'solid') return saved;
@@ -67,6 +86,7 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
   });
 
   const [size, setSize] = useState<MelonSize>(() => {
+    if (initialFraming?.size) return initialFraming.size;
     try {
       const saved = localStorage.getItem(SIZE_STORAGE_KEY);
       if (saved === 'small' || saved === 'medium' || saved === 'large') return saved;
@@ -89,6 +109,8 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isMountedRef = useRef(true);
   const cameraRequestIdRef = useRef(0);
+  const restoredCaptureRef = useRef(Boolean(restoredRind));
+  const reframeControlRef = useRef<HTMLButtonElement | null>(null);
 
   const handleVarietyChange = (val: MelonVariety) => {
     setVariety(val);
@@ -164,7 +186,9 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
 
   useEffect(() => {
     isMountedRef.current = true;
-    startCamera();
+    if (!restoredCaptureRef.current) {
+      void startCamera();
+    }
     return () => {
       isMountedRef.current = false;
       cameraRequestIdRef.current++;
@@ -177,6 +201,11 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
       }
     };
   }, [startCamera]);
+
+  useLayoutEffect(() => {
+    if (!restoredRind) return;
+    reframeControlRef.current?.focus();
+  }, [restoredRind]);
 
   const stopCameraStream = () => {
     cameraRequestIdRef.current++;
@@ -333,6 +362,14 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
           bellyPhotoDataUrl: capturedBellyImage || undefined,
           variety,
           size,
+          framing: {
+            rindImage: capturedRindImage,
+            bellyImage: capturedBellyImage || undefined,
+            cropBox,
+            groundSpotPoint,
+            variety,
+            size,
+          },
         });
       }
     };
@@ -342,6 +379,14 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
         bellyPhotoDataUrl: capturedBellyImage || undefined,
         variety,
         size,
+        framing: {
+          rindImage: capturedRindImage,
+          bellyImage: capturedBellyImage || undefined,
+          cropBox,
+          groundSpotPoint,
+          variety,
+          size,
+        },
       });
     };
     img.src = capturedRindImage;
@@ -593,6 +638,7 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({ onPhotoCropped, onBa
               </h3>
               <div className="flex shrink-0 gap-1">
                 <button
+                  ref={reframeControlRef}
                   type="button"
                   onClick={() => setMode('center_crop')}
                   className={cn(

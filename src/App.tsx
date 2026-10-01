@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { LandingPage } from './components/LandingPage';
-import { PhotoCapture, PhotoCaptureResult } from './components/PhotoCapture';
+import { PhotoCapture, PhotoCaptureResult, PhotoFraming } from './components/PhotoCapture';
 import { KnockRecorderView } from './components/KnockRecorderView';
 import { ResultCard } from './components/ResultCard';
 import { HistoryView } from './components/HistoryView';
@@ -8,6 +8,7 @@ import { AppShell, AppStep } from './components/ui/AppShell';
 import { analyzeWatermelonImage } from './lib/vision/analyzer';
 import { fuseRipenessSignals } from './lib/score/fusion';
 import { saveScanRecord, updateScanFeedback } from './lib/history/storage';
+import { backFromKnock } from './lib/scan/backFromKnock';
 import {
   VisualFeatures,
   AudioFeatures,
@@ -18,23 +19,57 @@ import {
   MelonSize,
 } from './lib/types';
 
+interface FlowState {
+  step: AppStep;
+  croppedPhotoUrl: string | null;
+  bellyPhotoUrl: string | null;
+  variety: MelonVariety;
+  size: MelonSize;
+  visualFeatures: VisualFeatures | null;
+  framing: PhotoFraming | null;
+  currentResult: RipenessResult | null;
+  currentScanId: string | null;
+}
+
+function freshFlow(step: AppStep): FlowState {
+  return {
+    step,
+    croppedPhotoUrl: null,
+    bellyPhotoUrl: null,
+    variety: 'striped',
+    size: 'medium',
+    visualFeatures: null,
+    framing: null,
+    currentResult: null,
+    currentScanId: null,
+  };
+}
+
 export const App: React.FC = () => {
-  const [step, setStep] = useState<AppStep>('home');
-  const [croppedPhotoUrl, setCroppedPhotoUrl] = useState<string | null>(null);
-  const [bellyPhotoUrl, setBellyPhotoUrl] = useState<string | null>(null);
-  const [variety, setVariety] = useState<MelonVariety>('striped');
-  const [size, setSize] = useState<MelonSize>('medium');
-  const [visualFeatures, setVisualFeatures] = useState<VisualFeatures | null>(null);
-  const [currentResult, setCurrentResult] = useState<RipenessResult | null>(null);
-  const [currentScanId, setCurrentScanId] = useState<string | null>(null);
+  const [flow, setFlow] = useState<FlowState>(() => freshFlow('home'));
+  const flowRef = useRef(flow);
+  const stepRef = useRef(flow.step);
+  flowRef.current = flow;
+  stepRef.current = flow.step;
 
   const handlePhotoCaptured = (result: PhotoCaptureResult) => {
-    setCroppedPhotoUrl(result.photoDataUrl);
-    setBellyPhotoUrl(result.bellyPhotoDataUrl || null);
-    setVariety(result.variety);
-    setSize(result.size);
+    const framing: PhotoFraming = result.framing ?? {
+      rindImage: result.photoDataUrl,
+      bellyImage: result.bellyPhotoDataUrl,
+      cropBox: { x: 0.2, y: 0.2, size: 0.6 },
+      variety: result.variety,
+      size: result.size,
+    };
 
-    // Analyze image on canvas
+    setFlow((current) => ({
+      ...current,
+      croppedPhotoUrl: result.photoDataUrl,
+      bellyPhotoUrl: result.bellyPhotoDataUrl ?? null,
+      variety: result.variety,
+      size: result.size,
+      framing,
+    }));
+
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -46,8 +81,16 @@ export const App: React.FC = () => {
       ctx.drawImage(img, 0, 0);
       const mainImgData = ctx.getImageData(0, 0, img.width, img.height);
 
+      const publishVisual = (visual: VisualFeatures) => {
+        stepRef.current = 'knock';
+        setFlow((current) => ({
+          ...current,
+          visualFeatures: visual,
+          step: 'knock',
+        }));
+      };
+
       if (result.bellyPhotoDataUrl) {
-        // Also load dedicated belly photo if present
         const bellyImg = new Image();
         bellyImg.onload = () => {
           const bellyCanvas = document.createElement('canvas');
@@ -57,67 +100,71 @@ export const App: React.FC = () => {
           if (bellyCtx) {
             bellyCtx.drawImage(bellyImg, 0, 0);
             const bellyImgData = bellyCtx.getImageData(0, 0, bellyImg.width, bellyImg.height);
-            const visual = analyzeWatermelonImage(mainImgData, {
-              groundSpotImage: bellyImgData,
-            });
-            setVisualFeatures(visual);
-            setStep('knock');
+            publishVisual(
+              analyzeWatermelonImage(mainImgData, {
+                groundSpotImage: bellyImgData,
+              })
+            );
           } else {
-            const visual = analyzeWatermelonImage(mainImgData, result.groundSpotPoint);
-            setVisualFeatures(visual);
-            setStep('knock');
+            publishVisual(analyzeWatermelonImage(mainImgData, result.groundSpotPoint));
           }
         };
         bellyImg.onerror = () => {
-          // Fallback if belly image fails to decode
-          const visual = analyzeWatermelonImage(mainImgData, result.groundSpotPoint);
-          setVisualFeatures(visual);
-          setStep('knock');
+          publishVisual(analyzeWatermelonImage(mainImgData, result.groundSpotPoint));
         };
         bellyImg.src = result.bellyPhotoDataUrl;
       } else {
-        const visual = analyzeWatermelonImage(mainImgData, result.groundSpotPoint);
-        setVisualFeatures(visual);
-        setStep('knock');
+        publishVisual(analyzeWatermelonImage(mainImgData, result.groundSpotPoint));
       }
     };
     img.onerror = () => {
       console.warn('Failed to decode main cropped watermelon image');
-      setStep('photo');
+      stepRef.current = 'photo';
+      setFlow((current) => ({ ...current, step: 'photo' }));
     };
     img.src = result.photoDataUrl;
   };
 
-  const handleKnockComplete = async (audioFeats: AudioFeatures) => {
-    if (!visualFeatures || !croppedPhotoUrl) return;
+  const commitAssessment = async (audioFeats: AudioFeatures) => {
+    if (stepRef.current !== 'knock') return;
+    const current = flowRef.current;
+    if (!current.visualFeatures || !current.croppedPhotoUrl) return;
 
-    const result = fuseRipenessSignals(visualFeatures, audioFeats, { variety, size });
-    setCurrentResult(result);
+    const result = fuseRipenessSignals(current.visualFeatures, audioFeats, {
+      variety: current.variety,
+      size: current.size,
+    });
 
     const scanId = `scan_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    setCurrentScanId(scanId);
-
     const record: MelonScanRecord = {
       id: scanId,
       createdAt: Date.now(),
-      photoDataUrl: croppedPhotoUrl,
-      bellyPhotoDataUrl: bellyPhotoUrl || undefined,
-      variety,
-      size,
+      photoDataUrl: current.croppedPhotoUrl,
+      bellyPhotoDataUrl: current.bellyPhotoUrl || undefined,
+      variety: current.variety,
+      size: current.size,
       result,
       feedback: 'unrated',
     };
+
+    setFlow((prev) => ({
+      ...prev,
+      currentResult: result,
+      currentScanId: scanId,
+    }));
 
     try {
       await saveScanRecord(record);
     } catch (err) {
       console.warn('Failed to persist scan record to IndexedDB:', err);
     }
-    setStep('result');
+
+    if (stepRef.current !== 'knock') return;
+    stepRef.current = 'result';
+    setFlow((prev) => ({ ...prev, step: 'result' }));
   };
 
-  const handleSkipKnock = async () => {
-    if (!visualFeatures || !croppedPhotoUrl) return;
+  const handleSkipKnock = () => {
     const fallbackAudio: AudioFeatures = {
       peakFrequencyHz: 0,
       rmsEnergy: 0,
@@ -130,66 +177,57 @@ export const App: React.FC = () => {
       acousticRipenessScore: 0.5,
       notes: ['Audio knock skipped by user'],
     };
-
-    const result = fuseRipenessSignals(visualFeatures, fallbackAudio, { variety, size });
-    setCurrentResult(result);
-
-    const scanId = `scan_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    setCurrentScanId(scanId);
-
-    const record: MelonScanRecord = {
-      id: scanId,
-      createdAt: Date.now(),
-      photoDataUrl: croppedPhotoUrl,
-      bellyPhotoDataUrl: bellyPhotoUrl || undefined,
-      variety,
-      size,
-      result,
-      feedback: 'unrated',
-    };
-
-    try {
-      await saveScanRecord(record);
-    } catch (err) {
-      console.warn('Failed to persist scan record to IndexedDB:', err);
-    }
-    setStep('result');
+    void commitAssessment(fallbackAudio);
   };
 
   const handleSaveFeedback = async (feedback: TasteFeedback, note?: string) => {
-    if (currentScanId) {
-      await updateScanFeedback(currentScanId, feedback, note);
+    const scanId = flowRef.current.currentScanId;
+    if (scanId) {
+      await updateScanFeedback(scanId, feedback, note);
     }
   };
 
   const startNewScan = () => {
-    setCroppedPhotoUrl(null);
-    setBellyPhotoUrl(null);
-    setVisualFeatures(null);
-    setCurrentResult(null);
-    setCurrentScanId(null);
-    setStep('photo');
+    stepRef.current = 'photo';
+    setFlow(freshFlow('photo'));
   };
 
   const navigateHome = () => {
-    setCroppedPhotoUrl(null);
-    setBellyPhotoUrl(null);
-    setVisualFeatures(null);
-    setCurrentResult(null);
-    setCurrentScanId(null);
-    setStep('home');
+    stepRef.current = 'home';
+    setFlow(freshFlow('home'));
   };
+
+  const handleBackToPhoto = () => {
+    if (stepRef.current !== 'knock') return;
+    stepRef.current = 'photo';
+    setFlow((current) => backFromKnock(current));
+  };
+
+  const {
+    step,
+    croppedPhotoUrl,
+    currentResult,
+    currentScanId,
+    framing,
+  } = flow;
 
   return (
     <AppShell
       currentStep={step}
       onNavigateHome={navigateHome}
-      onToggleHistory={() => setStep(step === 'history' ? 'home' : 'history')}
+      onToggleHistory={() => {
+        const next = step === 'history' ? 'home' : 'history';
+        stepRef.current = next;
+        setFlow((current) => ({
+          ...current,
+          step: current.step === 'history' ? 'home' : 'history',
+        }));
+      }}
     >
       {step === 'home' && (
         <LandingPage
           onStartScan={startNewScan}
-          onOpenHistory={() => setStep('history')}
+          onOpenHistory={() => setFlow((current) => ({ ...current, step: 'history' }))}
         />
       )}
 
@@ -197,13 +235,15 @@ export const App: React.FC = () => {
         <PhotoCapture
           onPhotoCropped={handlePhotoCaptured}
           onBack={navigateHome}
+          initialFraming={framing}
         />
       )}
 
       {step === 'knock' && (
         <KnockRecorderView
-          onKnockComplete={handleKnockComplete}
+          onKnockComplete={commitAssessment}
           onSkipKnock={handleSkipKnock}
+          onBack={handleBackToPhoto}
         />
       )}
 
