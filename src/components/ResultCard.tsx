@@ -24,6 +24,7 @@ import { Button, Card, ScoreRing } from './ui';
 import { useI18n } from '../i18n';
 import { getAllScanRecords } from '../lib/history/storage';
 import { generateShareCardBlob } from '../lib/share/shareCard';
+import { firmnessCue } from '../lib/copy/firmnessCue';
 import { cn } from '../lib/cn';
 
 interface ResultCardProps {
@@ -98,6 +99,21 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const details = getVerdictDetails();
   const Icon = details.icon;
 
+  const firmnessLabelFor = (peakHz: number, knockCount: number) => {
+    const cue = firmnessCue(peakHz, knockCount);
+    if (cue === 'dull') return t('firmnessDull');
+    if (cue === 'tight') return t('firmnessTight');
+    if (cue === 'unclear') return t('firmnessUnclear');
+    return t('audioNotMeasured');
+  };
+
+  const eatLine =
+    result.verdict === 'likely_ripe'
+      ? t('eatWindowRipe')
+      : result.verdict === 'likely_unripe'
+        ? t('eatWindowUnripe')
+        : t('eatWindowBorderline');
+
   const handleFeedback = (val: TasteFeedback) => {
     setFeedback(val);
     if (onSaveAndFeedback) {
@@ -115,8 +131,15 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         scoreLabel: t('scoreIndex'),
         verdictLabel: details.title,
         eatWindow: t('eatingWindow'),
+        eatWindowValue: eatLine,
         visualLabel: t('visualSignals'),
-        audioLabel: t('acousticKnock'),
+        audioLabel: t('resonantTone'),
+        firmnessLabel: firmnessLabelFor(
+          result.audioFeatures.peakFrequencyHz,
+          result.audioFeatures.knockCount
+        ),
+        cardSubtitle: t('appSubtitle'),
+        shareNote: t('shareSummary'),
       });
 
       if (blob && navigator.share && navigator.canShare) {
@@ -125,7 +148,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           await navigator.share({
             files: [file],
             title: t('shareTitle'),
-            text: `${t('appTitle')}: ${details.title} (${result.overallScore}/100). ${result.eatWindowLabel}`,
+            text: `${t('appTitle')}: ${details.title}. ${eatLine} ${t('shareSummary')}`,
           });
           setShareSuccess(true);
           return;
@@ -146,7 +169,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       } else if (navigator.share) {
         await navigator.share({
           title: t('shareTitle'),
-          text: `${t('appTitle')}: ${details.title} (${result.overallScore}/100). ${result.eatWindowLabel}`,
+          text: `${t('appTitle')}: ${details.title}. ${eatLine} ${t('shareSummary')}`,
         });
         setShareSuccess(true);
       }
@@ -275,7 +298,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 <div className="flex justify-between">
                   <span>{t('resonantTone')}:</span>
                   <span className="text-ink font-bold">
-                    {result.audioFeatures.peakFrequencyHz} Hz
+                    {firmnessLabelFor(
+                      result.audioFeatures.peakFrequencyHz,
+                      result.audioFeatures.knockCount
+                    )}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -390,7 +416,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 {result.overallScore}%
               </div>
               <div className="text-[10px] text-ink-muted font-semibold">
-                {result.audioFeatures.peakFrequencyHz} Hz
+                {firmnessLabelFor(
+                  result.audioFeatures.peakFrequencyHz,
+                  result.audioFeatures.knockCount
+                )}
               </div>
             </div>
 
@@ -408,7 +437,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 {previousScan.result.overallScore}%
               </div>
               <div className="text-[10px] text-ink-muted font-semibold">
-                {previousScan.result.audioFeatures.peakFrequencyHz} Hz
+                {firmnessLabelFor(
+                  previousScan.result.audioFeatures.peakFrequencyHz,
+                  previousScan.result.audioFeatures.knockCount
+                )}
               </div>
             </div>
           </div>

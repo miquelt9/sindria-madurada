@@ -41,5 +41,5 @@ server/
 - **Surface**: Cream pulp paper in Light (`#FBF6EE`), deep rind-black in Dark (`#0C1F14`).
 - **Primary**: Deep rind-green in Light (`#1B7A3D`), crisp rind-mint in Dark (`#3DCC6A`).
 - **Accent**: Ripe watermelon flesh rose/pink (`#E11D48` / `#FB7185`) used for unripe warnings and key feedback highlights.
-- **Spot**: Golden honey field-spot yellow (`#C4920A` / `#FACC15`) used for ground-spot tagging and attention cues.
+- **Spot**: UI token (`#C4920A` / `#FACC15`) for field-spot controls. The product cue is loss of green against the rind, not absolute yellow.
 - **Rules**: Always use semantic Tailwind classes (`bg-surface`, `bg-surface-raised`, `text-ink`, `text-ink-muted`, `border-border`, `bg-primary`, `text-ripe`, etc.) rather than raw `slate-*` / `emerald-*` classes.

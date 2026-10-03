@@ -88,12 +88,11 @@ export function extractAbbaszadehFeatures(
   const lowMidRatio =
     highBandEnergy > 0 ? lowBandEnergy / (highBandEnergy + 0.0001) : lowBandEnergy > 0 ? 3.0 : 1.0;
 
-  // Score heuristic based on paper findings:
-  // Ripe melons exhibit clear low-register resonant peak (120-220 Hz) with higher low-to-high ratio
+  // Heuristic buckets below are unchanged. They are not a sweetness measurement,
+  // and a hollow sound is not described here as a ripeness point.
   let acousticRipenessScore = 0.5;
 
   if (peakFrequencyHz >= 115 && peakFrequencyHz <= 210) {
-    // Ideal deep hollow pitch (classic resonant "punk" sound)
     acousticRipenessScore = 0.85;
   } else if (peakFrequencyHz > 210 && peakFrequencyHz <= 320) {
     // Borderline / smaller melon pitch
@@ -102,7 +101,6 @@ export function extractAbbaszadehFeatures(
     // High pitched tight/unripe ping
     acousticRipenessScore = 0.25;
   } else if (peakFrequencyHz < 95 && peakFrequencyHz > 40) {
-    // Very low / potentially overripe or hollow heart
     acousticRipenessScore = 0.45;
   }
 
@@ -165,15 +163,11 @@ export function aggregateKnockFeatures(knocks: Float32Array[], sampleRate: numbe
   notes.push(`Analyzed ${knocks.length} distinct knock sample${knocks.length > 1 ? 's' : ''}`);
 
   if (avgPeak >= 115 && avgPeak <= 210) {
-    notes.push(`Dominant resonance at ${avgPeak} Hz (characteristic ripe hollow timbre)`);
+    notes.push('Firmness cue from these knocks: dull rather than tight. Not more bass, and not a sweetness reading.');
   } else if (avgPeak > 280) {
-    notes.push(`High pitch resonance at ${avgPeak} Hz (dense/unripe acoustic response)`);
+    notes.push('Firmness cue from these knocks: tight rather than dull. Not more bass, and not a sweetness reading.');
   } else {
-    notes.push(`Resonant peak at ${avgPeak} Hz`);
-  }
-
-  if (avgRatio > 1.4) {
-    notes.push('Low frequency acoustic dominance confirms ripe internal flesh vibration');
+    notes.push('Firmness cue from these knocks is unclear. A hollow sound is a separate warning, not a ripeness point.');
   }
 
   return {

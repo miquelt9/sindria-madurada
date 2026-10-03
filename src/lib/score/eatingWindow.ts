@@ -17,7 +17,7 @@ export function eatingWindowForVerdict(verdict: RipenessVerdict): EatingWindow {
       return {
         eatFromDays: 0,
         eatUntilDays: 2,
-        eatWindowLabel: 'Eat now; peak in the next couple of days',
+        eatWindowLabel: 'Eat now; it will not ripen or sweeten after picking',
         willNotRipenOffVine: false,
       };
     case 'borderline':

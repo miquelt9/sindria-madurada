@@ -16,5 +16,5 @@ alwaysApply: true
   - Class merging: Always use `cn(...)` from `src/lib/cn.ts` for dynamic className props.
 - **Client Processing**: Use Web Audio API (`AnalyserNode` / `AudioContext`) for live knock signal FFT analysis and Canvas API (`ImageData`) for client-side visual feature extraction.
 - **Offline & Storage**: Store scan records (photo thumbnail, audio features, visual scores, feedback) in browser `IndexedDB`.
-- **Honesty in AI/Heuristics**: Provide explainable sub-scores (Ribbon/Stripe contrast, Field spot yellowness, Surface dullness, Acoustic resonant band) and express the final decision as `Likely Ripe`, `Unsure / Borderline`, or `Likely Unripe`.
+- **Honesty in AI/Heuristics**: The product ceiling is a coarse three-way stage/texture hint plus a separate hollow warning, not a sweetness test. Verdict words only: `Likely ripe`, `Unsure / Borderline`, or `Likely unripe`. Field spot copy is loss of green against the rind. Knock copy is dull versus tight from several knocks. Do not claim sugar, a headline accuracy, laser vibrometry, NIR, a fixed ripe frequency window, or that a hollow flag adds ripeness points. Fusion weight is a product choice, not a paper result.
 - **Mobile-First UX**: Responsive UI with touch-friendly controls, camera capture overlay, live mic volume/FFT feedback, and haptic feedback triggers where supported.

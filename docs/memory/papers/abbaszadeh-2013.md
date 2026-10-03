@@ -18,5 +18,7 @@
 - **Kurtosis (4th moment)**: $\frac{\frac{1}{n}\sum (x_i - \bar{x})^4}{\sigma^4}$
 - **Peak / Max value**: $\max |x_i|$
 
-## Practical Application to Smartphone Microphone
-While phone microphones capture acoustic air waves rather than laser Doppler surface velocity, the same frequency envelope (resonance in 100–300 Hz range for ripe melons, higher variance in amplitude peaks) provides a proven statistical basis for our on-device knock feature pipeline.
+## What this paper is, and what it is not
+The **94.74%** figure is KNN accuracy on **laser Doppler vibrometer** spectra from this lab set (43 Crimson Sweet fruit). It is not the accuracy of the Síndria Madurada PWA. The PWA does not use laser vibrometry, does not measure sweetness, and this digest does not set a ripe frequency window for the app.
+
+A phone microphone records airborne knocks, which is a different instrument from an LDV. The on-device knock cue stays a firmness hint (dull versus tight, from several knocks). A hollow sound is a separate warning, not a ripeness point.

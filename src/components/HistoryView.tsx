@@ -4,6 +4,7 @@ import { getAllScanRecords, updateScanFeedback, deleteScanRecord, clearAllScans 
 import { Calendar, Trash2, ChevronRight, ArrowLeft } from 'lucide-react';
 import { Button, Card, EmptyState, VerdictBadge } from './ui';
 import { useI18n } from '../i18n';
+import { firmnessCue } from '../lib/copy/firmnessCue';
 import { cn } from '../lib/cn';
 
 interface HistoryViewProps {
@@ -13,6 +14,21 @@ interface HistoryViewProps {
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
   const { t } = useI18n();
+
+  const firmnessLabelFor = (peakHz: number, knockCount: number) => {
+    const cue = firmnessCue(peakHz, knockCount);
+    if (cue === 'dull') return t('firmnessDull');
+    if (cue === 'tight') return t('firmnessTight');
+    if (cue === 'unclear') return t('firmnessUnclear');
+    return t('audioNotMeasured');
+  };
+
+  const feedbackLabel = (feedback: TasteFeedback) => {
+    if (feedback === 'ripe') return t('feedbackRipe');
+    if (feedback === 'unripe') return t('feedbackUnripe');
+    if (feedback === 'overripe') return t('feedbackOverripe');
+    return feedback;
+  };
   const [records, setRecords] = useState<MelonScanRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<MelonScanRecord | null>(null);
 
@@ -125,7 +141,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
                     </span>
                     {scan.feedback !== 'unrated' && (
                       <div className="text-[10px] text-primary font-bold mt-0.5">
-                        {t('historyTaste')}: {scan.feedback.toUpperCase()}
+                        {t('historyTaste')}: {feedbackLabel(scan.feedback)}
                       </div>
                     )}
                   </div>
@@ -175,7 +191,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
               <span>{t('eatingWindow')}</span>
             </div>
             <p className="text-xs font-semibold text-ink">
-              {selectedRecord.result.eatWindowLabel}
+              {selectedRecord.result.verdict === 'likely_ripe'
+                ? t('eatWindowRipe')
+                : selectedRecord.result.verdict === 'likely_unripe'
+                  ? t('eatWindowUnripe')
+                  : t('eatWindowBorderline')}
             </p>
           </div>
 
@@ -188,8 +208,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
               {selectedRecord.result.audioFeatures.knockCount > 0 ? (
                 <>
                   <strong>{t('resonantTone')}:</strong>{' '}
-                  {selectedRecord.result.audioFeatures.peakFrequencyHz} Hz (
-                  {selectedRecord.result.audioFeatures.knockCount} {t('knocksRegistered').toLowerCase()})
+                  {firmnessLabelFor(
+                    selectedRecord.result.audioFeatures.peakFrequencyHz,
+                    selectedRecord.result.audioFeatures.knockCount
+                  )}{' '}
+                  ({selectedRecord.result.audioFeatures.knockCount} {t('knocksRegistered').toLowerCase()})
                 </>
               ) : (
                 <>

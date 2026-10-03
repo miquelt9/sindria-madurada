@@ -14,7 +14,7 @@ export interface FusionInputs {
 
 export interface VisualFeatures {
   stripeContrastScore: number;    // 0 to 1 (high contrast ribbons = better)
-  groundSpotScore: number;        // 0 to 1 (creamy butter yellow = better)
+  groundSpotScore: number;        // 0 to 1 stage cue; copy must not call this sweetness or absolute yellow
   dullnessScore: number;          // 0 to 1 (matte/dull = mature, ultra shiny = unripe)
   groundSpotDetected: boolean;
   notes: string[];
