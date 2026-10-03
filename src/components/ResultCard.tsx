@@ -139,6 +139,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           result.audioFeatures.knockCount
         ),
         cardSubtitle: t('appSubtitle'),
+        shareNote: t('shareSummary'),
       });
 
       if (blob && navigator.share && navigator.canShare) {

@@ -148,16 +148,19 @@ export const ca: Translations = {
   summaryUnripe:
     'Probablement verda. La taca de terra pot faltar o seguir verda respecte a la pell, o els cops poden sonar tensos en lloc d’apagats. Un so buit és un avís a part, no un punt de maduresa. La fruita no madura ni s’endolceix després de collir-la.',
   tipSpotMissing:
-    'Prefereix un enquadrament on es vegi la taca de terra. Valora la pèrdua de verd respecte a la resta de la pell, no el groc absolut.',
+    'Prefereix un enquadrament on es vegi la taca de terra. Valora la pèrdua de verd respecte a la resta de la pell, no el groc absolut. Les paraules són només probablement madura, al límit, o probablement verda. Un so buit és un avís a part, no un punt de maduresa.',
   tipSpotPresent:
-    'La taca de terra es veu. És una pista d’estadi — pèrdua de verd respecte a la pell — no una prova de dolçor.',
-  tipKnockHigh: 'Els cops sonen tensos, no apagats. És una pista de fermesa, no més greu.',
-  tipKnockSweetZone: 'Diversos cops sonen apagats, no tensos. És una pista de fermesa, no més greu.',
+    'La taca de terra es veu. És una pista d’estadi — pèrdua de verd respecte a la pell — no una prova de dolçor. Les paraules són només probablement madura, al límit, o probablement verda. Un so buit és un avís a part, no un punt de maduresa.',
+  tipKnockHigh:
+    'Els cops sonen tensos, no apagats. És una pista de fermesa, no més greu. Les paraules són només probablement madura, al límit, o probablement verda. Un so buit és un avís a part, no un punt de maduresa.',
+  tipKnockSweetZone:
+    'Diversos cops sonen apagats, no tensos. És una pista de fermesa, no més greu. Les paraules són només probablement madura, al límit, o probablement verda. Un so buit és un avís a part, no un punt de maduresa.',
   tipKnockSweetZoneSmall:
-    'Diversos cops en aquesta síndria més petita sonen apagats, no tensos. És una pista de fermesa, no més greu.',
+    'Diversos cops en aquesta síndria més petita sonen apagats, no tensos. És una pista de fermesa, no més greu. Les paraules són només probablement madura, al límit, o probablement verda. Un so buit és un avís a part, no un punt de maduresa.',
   tipStripeLow:
-    'En la fruita ratllada, busca contrast entre les vetes. Una pell apagada no vol dir madura en totes les varietats.',
-  tipOffVineReminder: 'La fruita no madura ni s’endolceix després de collir-la.',
+    'En la fruita ratllada, busca contrast entre les vetes. Una pell apagada no vol dir madura en totes les varietats. Les paraules són només probablement madura, al límit, o probablement verda. Un so buit és un avís a part, no un punt de maduresa.',
+  tipOffVineReminder:
+    'La fruita no madura ni s’endolceix després de collir-la. Les paraules són només probablement madura, al límit, o probablement verda. Un so buit és un avís a part, no un punt de maduresa.',
   audioNotMeasured: 'No mesurat',
   audioNotMeasuredDesc: 'Test acústic omès per l’usuari',
   confidenceLabel: 'Confiança estimada',

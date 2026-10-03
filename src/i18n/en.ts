@@ -148,16 +148,19 @@ export const en: Translations = {
   summaryUnripe:
     'Likely unripe. The field spot may be missing or still green against the rind, or the knocks may sound tight rather than dull. A hollow sound is a separate warning, not a ripeness point. The fruit does not ripen or sweeten after picking.',
   tipSpotMissing:
-    'Prefer a frame that shows the field spot. Score loss of green against the rest of the rind, not absolute yellow.',
+    'Prefer a frame that shows the field spot. Score loss of green against the rest of the rind, not absolute yellow. The words are only likely ripe, borderline, or likely unripe. A hollow sound is a separate warning, not a ripeness point.',
   tipSpotPresent:
-    'The field spot is in frame. It is a stage cue — loss of green against the rind — not proof of sweetness.',
-  tipKnockHigh: 'Knocks sound tight rather than dull. That is a firmness cue, not more bass.',
-  tipKnockSweetZone: 'Several knocks sound dull rather than tight. That is a firmness cue, not more bass.',
+    'The field spot is in frame. It is a stage cue — loss of green against the rind — not proof of sweetness. The words are only likely ripe, borderline, or likely unripe. A hollow sound is a separate warning, not a ripeness point.',
+  tipKnockHigh:
+    'Knocks sound tight rather than dull. That is a firmness cue, not more bass. The words are only likely ripe, borderline, or likely unripe. A hollow sound is a separate warning, not a ripeness point.',
+  tipKnockSweetZone:
+    'Several knocks sound dull rather than tight. That is a firmness cue, not more bass. The words are only likely ripe, borderline, or likely unripe. A hollow sound is a separate warning, not a ripeness point.',
   tipKnockSweetZoneSmall:
-    'Several knocks on this smaller melon sound dull rather than tight. That is a firmness cue, not more bass.',
+    'Several knocks on this smaller melon sound dull rather than tight. That is a firmness cue, not more bass. The words are only likely ripe, borderline, or likely unripe. A hollow sound is a separate warning, not a ripeness point.',
   tipStripeLow:
-    'On striped fruit, look for contrast between ribbon stripes. A dull rind does not mean ripe for every cultivar.',
-  tipOffVineReminder: 'The fruit does not ripen or sweeten after picking.',
+    'On striped fruit, look for contrast between ribbon stripes. A dull rind does not mean ripe for every cultivar. The words are only likely ripe, borderline, or likely unripe. A hollow sound is a separate warning, not a ripeness point.',
+  tipOffVineReminder:
+    'The fruit does not ripen or sweeten after picking. The words are only likely ripe, borderline, or likely unripe. A hollow sound is a separate warning, not a ripeness point.',
   audioNotMeasured: 'Not measured',
   audioNotMeasuredDesc: 'Acoustic test skipped by user',
   confidenceLabel: 'Estimated confidence',

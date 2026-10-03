@@ -148,16 +148,19 @@ export const es: Translations = {
   summaryUnripe:
     'Probablemente verde. La mancha de tierra puede faltar o seguir verde frente a la corteza, o los golpes pueden sonar tensos en lugar de apagados. Un sonido hueco es un aviso aparte, no un punto de madurez. La fruta no madura ni se endulza después de cortarla.',
   tipSpotMissing:
-    'Prefiere un encuadre que muestre la mancha de tierra. Valora la pérdida de verde frente al resto de la corteza, no el amarillo absoluto.',
+    'Prefiere un encuadre que muestre la mancha de tierra. Valora la pérdida de verde frente al resto de la corteza, no el amarillo absoluto. Las palabras son solo probablemente madura, en el límite, o probablemente verde. Un sonido hueco es un aviso aparte, no un punto de madurez.',
   tipSpotPresent:
-    'La mancha de tierra se ve. Es una pista de estadio — pérdida de verde frente a la corteza — no una prueba de dulzor.',
-  tipKnockHigh: 'Los golpes suenan tensos, no apagados. Es una pista de firmeza, no más graves.',
-  tipKnockSweetZone: 'Varios golpes suenan apagados, no tensos. Es una pista de firmeza, no más graves.',
+    'La mancha de tierra se ve. Es una pista de estadio — pérdida de verde frente a la corteza — no una prueba de dulzor. Las palabras son solo probablemente madura, en el límite, o probablemente verde. Un sonido hueco es un aviso aparte, no un punto de madurez.',
+  tipKnockHigh:
+    'Los golpes suenan tensos, no apagados. Es una pista de firmeza, no más graves. Las palabras son solo probablemente madura, en el límite, o probablemente verde. Un sonido hueco es un aviso aparte, no un punto de madurez.',
+  tipKnockSweetZone:
+    'Varios golpes suenan apagados, no tensos. Es una pista de firmeza, no más graves. Las palabras son solo probablemente madura, en el límite, o probablemente verde. Un sonido hueco es un aviso aparte, no un punto de madurez.',
   tipKnockSweetZoneSmall:
-    'Varios golpes en esta sandía más pequeña suenan apagados, no tensos. Es una pista de firmeza, no más graves.',
+    'Varios golpes en esta sandía más pequeña suenan apagados, no tensos. Es una pista de firmeza, no más graves. Las palabras son solo probablemente madura, en el límite, o probablemente verde. Un sonido hueco es un aviso aparte, no un punto de madurez.',
   tipStripeLow:
-    'En la fruta rayada, busca contraste entre las vetas. Una corteza apagada no significa madura en todos los cultivares.',
-  tipOffVineReminder: 'La fruta no madura ni se endulza después de cortarla.',
+    'En la fruta rayada, busca contraste entre las vetas. Una corteza apagada no significa madura en todos los cultivares. Las palabras son solo probablemente madura, en el límite, o probablemente verde. Un sonido hueco es un aviso aparte, no un punto de madurez.',
+  tipOffVineReminder:
+    'La fruta no madura ni se endulza después de cortarla. Las palabras son solo probablemente madura, en el límite, o probablemente verde. Un sonido hueco es un aviso aparte, no un punto de madurez.',
   audioNotMeasured: 'No medido',
   audioNotMeasuredDesc: 'Test acústico omitido por el usuario',
   confidenceLabel: 'Confianza estimada',

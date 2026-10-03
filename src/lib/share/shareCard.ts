@@ -1,5 +1,22 @@
 import { RipenessResult } from '../types';
 
+function wrapCanvasLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    const trial = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(trial).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = trial;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 export async function generateShareCardBlob(
   result: RipenessResult,
   photoUrl?: string,
@@ -13,6 +30,8 @@ export async function generateShareCardBlob(
     audioLabel: string;
     firmnessLabel?: string;
     cardSubtitle?: string;
+    /** Same clipboard sentence, including the hollow warning. */
+    shareNote?: string;
   }
 ): Promise<Blob | null> {
   if (typeof document === 'undefined') return null;
@@ -141,7 +160,22 @@ export async function generateShareCardBlob(
 
   ctx.fillStyle = isDark ? '#FFFFFF' : '#141E17';
   ctx.font = 'bold 16px DM Sans, sans-serif, system-ui';
-  ctx.fillText(labels?.eatWindowValue || result.eatWindowLabel, width / 2, currentY + 54);
+  const eatText = labels?.eatWindowValue || result.eatWindowLabel;
+  const eatLines = wrapCanvasLines(ctx, eatText, width - 100);
+  eatLines.forEach((line, index) => {
+    ctx.fillText(line, width / 2, currentY + 48 + index * 18);
+  });
+
+  const note = labels?.shareNote?.trim();
+  if (note) {
+    ctx.fillStyle = isDark ? '#D8E2DA' : '#334036';
+    ctx.font = '13px DM Sans, sans-serif, system-ui';
+    const noteLines = wrapCanvasLines(ctx, note, width - 96);
+    const noteTop = currentY + 80 + 28;
+    noteLines.forEach((line, index) => {
+      ctx.fillText(line, width / 2, noteTop + index * 18);
+    });
+  }
 
   // Footer
   ctx.fillStyle = isDark ? '#6B7F72' : '#9C8F7E';
