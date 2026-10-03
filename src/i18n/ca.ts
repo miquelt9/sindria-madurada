@@ -142,11 +142,11 @@ export const ca: Translations = {
   eatImmediate: 'Immediat',
   eatDaysRange: '{from}–{until} dies',
   summaryRipe:
-    'Probablement madura: una pista grollera d’estadi i textura, no una lectura de dolçor. Si es veu la taca de terra, es llegeix com a pèrdua de verd respecte a la pell. Diversos cops apagats, i no tensos, són una pista de fermesa, no més greu. Un so buit és un avís a part, no un punt de maduresa. La fruita no madura ni s’endolceix després de collir-la.',
+    'Probablement madura: una pista grollera d’estadi i textura, no una lectura de dolçor. La taca de terra, quan es veu, és pèrdua de verd respecte a la pell. Apagat o tens, amb diversos cops, és una pista de fermesa, no més greu. Un so buit és un avís a part, no un punt de maduresa. La fruita no madura ni s’endolceix després de collir-la.',
   summaryBorderline:
     'Al límit. Les pistes d’estadi i de textura no coincideixen. Prefereix un enquadrament amb la taca de terra i dóna diversos cops. Un so buit és un avís a part, no un punt de maduresa. La fruita no madura ni s’endolceix després de collir-la.',
   summaryUnripe:
-    'Probablement verda. Els cops sonen tensos, o la taca de terra no es veu o encara és verda respecte a la pell. Un so buit és un avís a part, no un punt de maduresa. La fruita no madura ni s’endolceix després de collir-la.',
+    'Probablement verda. La taca de terra pot faltar o seguir verda respecte a la pell, o els cops poden sonar tensos en lloc d’apagats. Un so buit és un avís a part, no un punt de maduresa. La fruita no madura ni s’endolceix després de collir-la.',
   tipSpotMissing:
     'Prefereix un enquadrament on es vegi la taca de terra. Valora la pèrdua de verd respecte a la resta de la pell, no el groc absolut.',
   tipSpotPresent:

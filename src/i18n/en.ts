@@ -142,11 +142,11 @@ export const en: Translations = {
   eatImmediate: 'Immediate',
   eatDaysRange: '{from}–{until} days',
   summaryRipe:
-    'Likely ripe — a coarse stage and texture hint, not a sweetness reading. If the field spot is in frame, it is loss of green against the rind. Several knocks that sound dull rather than tight are a firmness cue, not more bass. A hollow sound is a separate warning, not a ripeness point. The fruit does not ripen or sweeten after picking.',
+    'Likely ripe — a coarse stage and texture hint, not a sweetness reading. The field spot, when it is in frame, is loss of green against the rind. Dull versus tight, from several knocks, is a firmness cue, not more bass. A hollow sound is a separate warning, not a ripeness point. The fruit does not ripen or sweeten after picking.',
   summaryBorderline:
     'Borderline. The stage and texture cues disagree. Prefer a frame that shows the field spot, and take several knocks. A hollow sound is a separate warning, not a ripeness point. The fruit does not ripen or sweeten after picking.',
   summaryUnripe:
-    'Likely unripe. Knocks sound tight, or the field spot is missing or still green against the rind. A hollow sound is a separate warning, not a ripeness point. The fruit does not ripen or sweeten after picking.',
+    'Likely unripe. The field spot may be missing or still green against the rind, or the knocks may sound tight rather than dull. A hollow sound is a separate warning, not a ripeness point. The fruit does not ripen or sweeten after picking.',
   tipSpotMissing:
     'Prefer a frame that shows the field spot. Score loss of green against the rest of the rind, not absolute yellow.',
   tipSpotPresent:

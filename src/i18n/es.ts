@@ -142,11 +142,11 @@ export const es: Translations = {
   eatImmediate: 'Inmediato',
   eatDaysRange: '{from}–{until} días',
   summaryRipe:
-    'Probablemente madura: una pista gruesa de estadio y textura, no una lectura de dulzor. Si se ve la mancha de tierra, se lee como pérdida de verde frente a la corteza. Varios golpes apagados, y no tensos, son una pista de firmeza, no más graves. Un sonido hueco es un aviso aparte, no un punto de madurez. La fruta no madura ni se endulza después de cortarla.',
+    'Probablemente madura: una pista gruesa de estadio y textura, no una lectura de dulzor. La mancha de tierra, cuando se ve, es pérdida de verde frente a la corteza. Apagado o tenso, con varios golpes, es una pista de firmeza, no más graves. Un sonido hueco es un aviso aparte, no un punto de madurez. La fruta no madura ni se endulza después de cortarla.',
   summaryBorderline:
     'En el límite. Las pistas de estadio y de textura no coinciden. Prefiere un encuadre con la mancha de tierra y da varios golpes. Un sonido hueco es un aviso aparte, no un punto de madurez. La fruta no madura ni se endulza después de cortarla.',
   summaryUnripe:
-    'Probablemente verde. Los golpes suenan tensos, o la mancha de tierra no se ve o sigue verde frente a la corteza. Un sonido hueco es un aviso aparte, no un punto de madurez. La fruta no madura ni se endulza después de cortarla.',
+    'Probablemente verde. La mancha de tierra puede faltar o seguir verde frente a la corteza, o los golpes pueden sonar tensos en lugar de apagados. Un sonido hueco es un aviso aparte, no un punto de madurez. La fruta no madura ni se endulza después de cortarla.',
   tipSpotMissing:
     'Prefiere un encuadre que muestre la mancha de tierra. Valora la pérdida de verde frente al resto de la corteza, no el amarillo absoluto.',
   tipSpotPresent:
