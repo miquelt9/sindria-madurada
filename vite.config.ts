@@ -24,9 +24,10 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 35 * 1024 * 1024,
       },
       manifest: {
-        name: 'Síndria Madurada - Watermelon Ripeness Checker',
+        name: 'Síndria Madurada',
         short_name: 'Síndria',
-        description: 'Check watermelon ripeness with your camera and knock acoustic analysis',
+        description:
+          'Coarse watermelon stage and texture hint from a photo and several knocks. Not a sweetness test. A hollow sound is a separate warning.',
         theme_color: '#1B7A3D',
         background_color: '#FBF6EE',
         display: 'standalone',

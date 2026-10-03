@@ -3,7 +3,7 @@ import { Translations } from './types';
 export const ca: Translations = {
   // Common & Navigation
   appTitle: 'Síndria Madurada',
-  appSubtitle: 'Detector de maduresa per foto i cops',
+  appSubtitle: 'Pista grollera d’estadi i textura',
   privacyFooter: "Totes les anàlisis i mostres d'àudio es processen 100% en local al teu dispositiu.",
   history: 'Historial',
   newScan: 'Nova anàlisi',
@@ -18,14 +18,18 @@ export const ca: Translations = {
   scanStepResult: 'Resultat',
 
   // Landing Page
-  landingTagline: 'Comprova la maduresa de la síndria amb la càmera i el so dels teus cops.',
+  landingTagline:
+    'Una pista grollera en tres vies, amb una foto i diversos cops: probablement madura, al límit, o probablement verda. No és un test de dolçor. Un so buit és un avís a part.',
   landingHeroBadge: '100% en local • Sense registre • Privacitat total',
-  landingStep1Title: '1. Foto i pell',
-  landingStep1Desc: 'Enquadra la síndria, tria la varietat i afegeix opcionalment la taca groga de terra.',
-  landingStep2Title: '2. 3 cops amb els artells',
-  landingStep2Desc: 'Posa el telèfon contra la pell i dóna 3 cops ferms per mesurar la ressonància acústica.',
-  landingStep3Title: '3. Diagnòstic i dies per menjar',
-  landingStep3Desc: "Avaluació transparent de maduresa i recomanació de finestra òptima de consum.",
+  landingStep1Title: '1. Foto i taca de terra',
+  landingStep1Desc:
+    'Prefereix un enquadrament on es vegi la taca de terra. La pista és la pèrdua de verd respecte a la resta de la pell, no el groc absolut.',
+  landingStep2Title: '2. Diversos cops',
+  landingStep2Desc:
+    'Dóna diversos cops (tres de ferms). Apagat o tens és una pista de fermesa, no més greu. Una sala sorollosa o una mida extrema abaixa la confiança.',
+  landingStep3Title: '3. Pista en tres vies',
+  landingStep3Desc:
+    'Probablement madura, al límit, o probablement verda. La fruita no madura ni s’endolceix després de collir-la. Un so buit és un avís a part, no un punt de maduresa.',
   landingCheckCta: 'Comprovar una síndria',
   landingHistoryCta: 'Veure historial',
   landingShareConsent: 'Compartir anàlisis anònimes per millorar el model (foto + dades)',
@@ -34,20 +38,21 @@ export const ca: Translations = {
 
   // Photo Capture
   captureGuideRind: 'Enquadra la síndria sencera',
-  captureGuideBelly: 'Enquadra la taca groga de terra (panxa)',
+  captureGuideBelly: 'Prefereix un enquadrament amb la taca de terra',
   cameraInactive: 'Càmera inactiva o pendent de permís.',
   cameraActivate: 'Activar càmera',
   cameraRestart: 'Reiniciar càmera',
   uploadFromGallery: 'Pujar foto de la galeria',
   takePhoto: 'Fer foto',
   cropStepRind: '1. Toca la síndria per centrar',
-  cropStepBelly: '2. (Opcional) Toca la taca groga',
+  cropStepBelly: '2. (Opcional) Toca la taca de terra',
   cropModeCrop: 'Enquadrament',
   cropModeSpot: 'Taca',
   bellyShotButton: '+ Afegir foto de la panxa/taca',
   bellyShotAdded: 'Foto de la panxa afegida',
   bellyShotRetake: 'Repetir foto de la panxa',
-  bellyShotOptional: 'Opcional: Fes una foto de la part inferior groga',
+  bellyShotOptional:
+    'Opcional: fotografia la taca de terra per comparar la pèrdua de verd amb la resta de la pell',
   varietyLabel: 'Pell',
   varietyStriped: 'Ratllada',
   varietySolid: 'Llisa / Fosca',
@@ -65,8 +70,9 @@ export const ca: Translations = {
   torchOff: 'Encendre llanterna',
 
   // Knock Recording
-  knockTitle: 'Test acústic de cops',
-  knockDesc: 'Posa el telèfon a sobre o contra la pell de la síndria i dóna 3 cops ferms amb els artells.',
+  knockTitle: 'Fermesa dels cops',
+  knockDesc:
+    'Recolza el telèfon a la pell i dóna diversos cops (tres). Apagat o tens és una pista de fermesa, no més greu. El soroll o una mida extrema abaixen la confiança.',
   knockMicHearing: 'El micròfon t’escolta. Cop #1…',
   knockDetected: 'Detectat el cop #{count}! Dóna el cop #{next}…',
   knockListening: 'Escoltant el cop #1…',
@@ -79,23 +85,27 @@ export const ca: Translations = {
   knockSkip: 'Ometre test acústic (només anàlisi visual)',
 
   // Result & Verdict
-  verdictRipe: 'Molt Probable Madura',
-  verdictBorderline: 'Dubitativa / Al Límit',
-  verdictUnripe: 'Probablement Verda',
+  verdictRipe: 'Probablement madura',
+  verdictBorderline: 'Dubitativa / al límit',
+  verdictUnripe: 'Probablement verda',
   scoreIndex: 'Índex',
   visualSignals: 'Senyals visuals',
   ribbonStripes: 'Vetllat / Ratlles',
-  groundSpot: 'Taca de terra',
-  acousticKnock: 'Acústica de cops',
-  resonantTone: 'To ressonant',
+  groundSpot: 'Taca (menys verd)',
+  acousticKnock: 'Fermesa dels cops',
+  resonantTone: 'Fermesa',
+  firmnessDull: 'Apagat',
+  firmnessTight: 'Tens',
+  firmnessUnclear: 'Poc clar',
   knocksRegistered: 'Cops registrats',
   detailedObservations: 'Observacions detallades',
   eatingWindow: 'Finestra òptima de consum',
   willNotRipenWarning: 'Recorda: Les síndries no continuen madurant ni s’endolceixen un cop collides.',
-  feedbackTitle: 'Validació post-tall (com ha sortit?)',
-  feedbackDesc: 'Quan obris la síndria a casa, indica com ha sortit per perfeccionar el model al teu dispositiu.',
-  feedbackRipe: 'Madura / Dolça',
-  feedbackUnripe: 'Verda',
+  feedbackTitle: 'Després de tallar-la',
+  feedbackDesc:
+    'Marca probablement madura, al límit, o probablement verda. La nota queda al dispositiu. No és un test de dolçor.',
+  feedbackRipe: 'Probablement madura',
+  feedbackUnripe: 'Probablement verda',
   feedbackOverripe: 'Passada',
   feedbackSaved: "Gràcies! Feedback desat a l'historial del dispositiu.",
   anotherScan: 'Analitzar una altra síndria',
@@ -108,9 +118,10 @@ export const ca: Translations = {
   compareWorse: 'Puntuació inferior a la darrera',
   compareEqual: 'Puntuació similar a la darrera',
   compareEatWindow: 'Consum',
-  comparePitch: 'So',
-  shareTitle: 'Compartir diagnòstic',
-  shareSummary: 'Fitxa de Síndria Madurada',
+  comparePitch: 'Fermesa',
+  shareTitle: 'Compartir la pista',
+  shareSummary:
+    'Pista grollera d’estadi i textura. No és un test de dolçor. Un so buit és un avís a part, no un punt de maduresa.',
   shareCopied: 'Resum copiat al porta-retalls!',
   downloadCard: 'Descarregar imatge',
 
@@ -120,30 +131,38 @@ export const ca: Translations = {
   historyEmptyDesc: "Fes una foto i dóna 3 cops a una síndria per veure el resultat i l'historial aquí.",
   historyStartScan: 'Començar anàlisi',
   historyClearConfirm: "Vols eliminar tot l'historial d'anàlisis d'aquest dispositiu?",
-  historyTaste: 'Tast',
+  historyTaste: 'Després de tallar',
   historyDeleteAria: 'Esborrar aquesta anàlisi',
   historyClearAria: "Esborrar tot l'historial",
 
   // Localized Explanations & UI
-  eatWindowRipe: 'Menjar ara; en el seu millor moment els propers 2 dies',
+  eatWindowRipe: 'Menja-la ara; no madura ni s’endolceix després de collir-la',
   eatWindowBorderline: 'La textura es pot estovar lleugerament; la dolçor no augmentarà',
-  eatWindowUnripe: 'No madurarà fora de la mata; consumir en 2–4 dies (dolçor moderada)',
+  eatWindowUnripe: 'No madurarà fora de la mata; menja-la en uns 2–4 dies, sense esperar més dolçor',
   eatImmediate: 'Immediat',
   eatDaysRange: '{from}–{until} dies',
-  summaryRipe: 'Els senyals indiquen que aquesta síndria està madura i a punt. Desenvolupament madur de la pell i ressonància acústica profunda i buida.',
-  summaryBorderline: 'Senyals mixtos detectats. Alguns indicadors són favorables, però d’altres estan al límit. Revisa la taca groga abans de triar.',
-  summaryUnripe: 'Aquesta síndria probablement necessita més temps o s’ha collit massa d’hora. Resposta acústica tensa o manca de taca groga de terra.',
-  tipSpotMissing: 'Gira la síndria per buscar una taca de terra cremosa/groguenca (on reposava a terra).',
-  tipSpotPresent: 'La taca de terra mostra un to mantega cremós sa, indicant que ha madurat a la mata.',
-  tipKnockHigh: 'El so dels cops és agut ("ping/panc"). Un so buit i ressonant ("punc") és l’ideal.',
-  tipKnockSweetZone: 'El to acústic coincideix amb la zona ressonant dolça (120–200 Hz).',
-  tipKnockSweetZoneSmall: 'El to acústic coincideix amb la zona ressonant dolça per a una síndria petita.',
-  tipStripeLow: 'Busca síndries amb un contrast clar i definit entre les vetes verdes fosques i clares.',
-  tipOffVineReminder: 'Recorda: Les síndries no continuen madurant un cop collides de la mata.',
+  summaryRipe:
+    'Probablement madura: una pista grollera d’estadi i textura, no una lectura de dolçor. Si es veu la taca de terra, es llegeix com a pèrdua de verd respecte a la pell. Diversos cops apagats, i no tensos, són una pista de fermesa, no més greu. Un so buit és un avís a part, no un punt de maduresa. La fruita no madura ni s’endolceix després de collir-la.',
+  summaryBorderline:
+    'Al límit. Les pistes d’estadi i de textura no coincideixen. Prefereix un enquadrament amb la taca de terra i dóna diversos cops. Un so buit és un avís a part, no un punt de maduresa. La fruita no madura ni s’endolceix després de collir-la.',
+  summaryUnripe:
+    'Probablement verda. Els cops sonen tensos, o la taca de terra no es veu o encara és verda respecte a la pell. Un so buit és un avís a part, no un punt de maduresa. La fruita no madura ni s’endolceix després de collir-la.',
+  tipSpotMissing:
+    'Prefereix un enquadrament on es vegi la taca de terra. Valora la pèrdua de verd respecte a la resta de la pell, no el groc absolut.',
+  tipSpotPresent:
+    'La taca de terra es veu. És una pista d’estadi — pèrdua de verd respecte a la pell — no una prova de dolçor.',
+  tipKnockHigh: 'Els cops sonen tensos, no apagats. És una pista de fermesa, no més greu.',
+  tipKnockSweetZone: 'Diversos cops sonen apagats, no tensos. És una pista de fermesa, no més greu.',
+  tipKnockSweetZoneSmall:
+    'Diversos cops en aquesta síndria més petita sonen apagats, no tensos. És una pista de fermesa, no més greu.',
+  tipStripeLow:
+    'En la fruita ratllada, busca contrast entre les vetes. Una pell apagada no vol dir madura en totes les varietats.',
+  tipOffVineReminder: 'La fruita no madura ni s’endolceix després de collir-la.',
   audioNotMeasured: 'No mesurat',
   audioNotMeasuredDesc: 'Test acústic omès per l’usuari',
   confidenceLabel: 'Confiança estimada',
-  confidenceNotice: 'Puntuació heurística basada en regles (no calibrada)',
+  confidenceNotice:
+    'Pista grollera. Tracta-la amb confiança baixa si falta la taca de terra, la sala és sorollosa o la fruita té una mida extrema.',
   themeLight: 'Tema: Clar (canviar a fosc)',
   themeDark: 'Tema: Fosc (canviar a sistema)',
   themeSystem: 'Tema: Automàtic ({resolved}) (canviar a clar)',

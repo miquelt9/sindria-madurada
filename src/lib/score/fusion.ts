@@ -64,9 +64,9 @@ export function fuseRipenessSignals(
   const acousticScore = sizeAdjustedAcousticScore(audio, size);
   const audioScore = Math.round(acousticScore * 100);
 
-  // 2. Fusion Weighting
-  // If we have valid audio knocks, we combine 50% visual + 50% audio.
-  // If audio is noisy / missing knocks, visual gets higher weight.
+  // Fusion weighting is a product choice, not a result from any paper.
+  // With two or more knocks the mix is half visual and half knock. Fewer knocks
+  // lean on the photo. These weights are not a sweetness measurement.
   let fusedScoreRaw: number;
   let confidence: number;
 
@@ -99,38 +99,44 @@ export function fuseRipenessSignals(
 
   if (verdict === 'likely_ripe') {
     summaryExplanation =
-      'Signs indicate this watermelon is ripe and ready to enjoy. External markings show mature rind development and acoustic resonance is deep and hollow.';
+      'Likely ripe — a coarse stage and texture hint, not a sweetness reading. If the field spot is in frame, it is loss of green against the rind. Several knocks that sound dull rather than tight are a firmness cue, not more bass. A hollow sound is a separate warning, not a ripeness point. The fruit does not ripen or sweeten after picking.';
   } else if (verdict === 'likely_unripe') {
     summaryExplanation =
-      'This watermelon likely needs more time or was harvested too early. Acoustic response was tight or visual markings lack yellow ground spot and stripe contrast.';
+      'Likely unripe. Knocks sound tight, or the field spot is missing or still green against the rind. A hollow sound is a separate warning, not a ripeness point. The fruit does not ripen or sweeten after picking.';
   } else {
     summaryExplanation =
-      'Mixed signals detected. Some indicators are favorable, but others are borderline. Check the underside for a buttery yellow spot before buying.';
+      'Borderline. The stage and texture cues disagree. Prefer a frame that shows the field spot, and take several knocks. A hollow sound is a separate warning, not a ripeness point. The fruit does not ripen or sweeten after picking.';
   }
 
   if (!visual.groundSpotDetected || visual.groundSpotScore < 0.5) {
-    actionableTips.push('Turn the melon over to check for a creamy yellow field spot (where it rested on earth).');
+    actionableTips.push(
+      'Prefer a frame that shows the field spot. Score loss of green against the rest of the rind, not absolute yellow.'
+    );
   } else {
-    actionableTips.push('Field spot shows healthy creamy butter tone, indicating it ripened on the vine.');
+    actionableTips.push(
+      'The field spot is in frame. It is a stage cue — loss of green against the rind — not proof of sweetness.'
+    );
   }
 
   const peakMax = ripePeakMaxHz(size);
   if (audio.peakFrequencyHz > peakMax + 40) {
-    actionableTips.push('Knock sound is slightly high-pitched ("pink/pank"). A deep resonant "punk" sound is ideal.');
+    actionableTips.push('Knocks sound tight rather than dull. That is a firmness cue, not more bass.');
   } else if (audio.peakFrequencyHz >= RIPE_PEAK_MIN_HZ && audio.peakFrequencyHz <= peakMax) {
     actionableTips.push(
       size === 'small'
-        ? 'Acoustic pitch matches the resonant sweet zone for a smaller melon.'
-        : 'Acoustic pitch matches the resonant sweet zone (120–200 Hz).'
+        ? 'Several knocks on this smaller melon sound dull rather than tight. That is a firmness cue, not more bass.'
+        : 'Several knocks sound dull rather than tight. That is a firmness cue, not more bass.'
     );
   }
 
   if (variety !== 'solid' && visual.stripeContrastScore < 0.4) {
-    actionableTips.push('Look for watermelons with clearly defined, deep green contrast between ribbon stripes.');
+    actionableTips.push(
+      'On striped fruit, look for contrast between ribbon stripes. A dull rind does not mean ripe for every cultivar.'
+    );
   }
 
   if (verdict !== 'likely_ripe') {
-    actionableTips.push('Remember: Watermelons do not continue to ripen once picked from the vine.');
+    actionableTips.push('Remember: Watermelons do not continue to ripen or sweeten once picked from the vine.');
   }
 
   return {

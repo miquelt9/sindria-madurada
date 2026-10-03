@@ -8,7 +8,7 @@
 - [x] Dedicated underside/belly photo capture & field spot HSV analysis
 - [x] Variety (`striped` / `solid`) and Size (`small` / `medium` / `large`) chip adjustment
 - [x] 3-Knock acoustic recording + wake lock + adaptive RMS onset detector + discrete FFT + Abbaszadeh statistical features
-- [x] Canvas visual heuristics (Stripe ribbon contrast + ground spot yellowness + surface dullness)
+- [x] Canvas visual heuristics (stripe contrast, field spot as loss of green against the rind, surface dullness)
 - [x] Multimodal fusion scoring, honest eating window & explainable breakdown
 - [x] Side-by-side previous scan comparison & local share card generation
 - [x] Local IndexedDB history & feedback loop ("How did it taste?")

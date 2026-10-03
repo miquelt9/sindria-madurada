@@ -1,13 +1,21 @@
 # Research Memory
 
-## Key Scientific Findings
+These notes are lab background. They are **not** the accuracy of this PWA.
 
-### 1. Acoustic Resonance & Vibration (Abbaszadeh et al. 2013 / Qilin Dataset / Stone et al.)
-- When struck, ripe watermelons resonate with a characteristic low-pitched, reverberant acoustic response (typically 120–180 Hz depending on size/mass, with clear harmonic decay).
-- Unripe melons produce higher, tighter, "ping"-like frequencies with rapid damping; overripe/hollow-heart melons produce muffled, highly damped lower bass or split peaks.
-- Abbaszadeh et al. demonstrated that **FFT Amplitude** features (Mean, RMS, Standard Deviation, Skewness, Kurtosis, Peak Amplitude) across 0–1000 Hz achieved ~95% classification accuracy using KNN.
+The app is a coarse three-way stage and texture hint (likely ripe, borderline, or likely unripe) plus a separate hollow warning. It does not measure sweetness. No paper sets the fusion weight; that weight is a product choice.
 
-### 2. Rind Texture & Stripe "Ribbons" (Phothisonothai et al. 2016 / Almanac Cues)
-- Striped watermelon cultivars (such as Crimson Sweet) exhibit high contrast between dark green stripes and the lighter valleys ("ribbons").
-- Fully matured rinds develop a dull, matte finish (low specular highlight fraction) rather than a glossy/shiny young coat.
-- The ground spot (field spot where the melon rested on soil) transforms from pale greenish-white to a rich creamy butter-yellow as sugars peak on the vine.
+Do not quote a lab percentage, a sugar figure, or a frequency window as what this app achieves.
+
+## What may be cited, and only with the instrument
+
+- Abbaszadeh et al. 2013 recorded vibration with a **laser Doppler vibrometer (LDV)**, not a phone microphone, on a small Crimson Sweet lab set. FFT amplitude features on that LDV task reached about **95%** (also reported as 94.74% with KNN). That figure is the LDV result. It is not this PWA’s accuracy. See `papers/abbaszadeh-2013.md`.
+- Other headline rates (a phone SVM on about 40 fruit with no sugar labels, an MFCC classifier, a fuzzy score against an expert, an NIR sugar error, a light-box study, a starfruit study) belong to those instruments and those limits. They are not this app’s accuracy, and they do not belong in the UI or the README.
+
+## What this product is allowed to say
+
+- The fruit does not ripen or sweeten after picking.
+- Field spot is a stage cue: loss of green against the rest of the rind. It does not prove sweetness, and a centimetre size is not a rule.
+- Several knocks. Dull versus tight is a firmness cue, not more bass.
+- A hollow sound is its own warning, not a ripeness point. If the current heuristic still moves the score when a low knock is present, that behaviour is not described here as intended, and this file does not add a hollow detector.
+- A dull rind does not mean ripe for every cultivar.
+- This file does not set a ripe frequency window for the app.

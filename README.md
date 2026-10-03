@@ -1,16 +1,17 @@
 # Síndria Madurada 🍉
 
-> **Síndria madurada** (Catalan for *"Ripe Watermelon"*) is a guest-first, client-only Progressive Web App (PWA) that evaluates watermelon ripeness using computer vision (rind stripe contrast, field spot yellowness, surface dullness) and acoustic knock resonance (knuckle-tap FFT signal processing).
+> **Síndria madurada** (Catalan for *"Ripe Watermelon"*) is a guest-first, client-only Progressive Web App (PWA). It gives a **coarse three-way stage and texture hint** — likely ripe, borderline, or likely unripe — from a photo and several knocks. A hollow sound is a **separate warning**, not a ripeness point. It is not a sweetness test.
 
 ---
 
 ## Key Features
 
 - **100% On-Device & Privacy-First**: All camera capture, image canvas analysis, audio FFT processing, and scan history are stored locally in IndexedDB. No login or cloud upload required.
-- **Multimodal Ripeness Scoring**:
-  - **Visual Rind Analysis**: Analyzes local stripe contrast ribbons, underside creamy-yellow ground spot, and surface dullness/specular shine.
-  - **Acoustic Knock Analysis**: Listens for 3 knuckle knocks via Web Audio API, extracting dominant resonance peak frequency (115–210 Hz ripe target band) and statistical moments.
-- **Honest Ripeness & Eating Window**: No misleading claims. Transparent three-way verdicts (`Likely Ripe`, `Unsure / Borderline`, `Likely Unripe`) with honest off-the-vine education and recommended eating windows.
+- **Coarse stage and texture hint**:
+  - **Photo**: Prefer a frame that shows the field spot. The cue is loss of green against the rest of the rind, not absolute yellow and not a centimetre rule. Stripe contrast is a rind cue. A dull rind does not mean ripe for every cultivar.
+  - **Knocks**: Several knocks, not one. Dull versus tight is a firmness cue, not more bass and not a sweetness reading.
+  - **Hollow**: A hollow sound is its own warning. It is not a ripeness point.
+- **Honest verdicts**: Words only — `Likely ripe`, `Unsure / Borderline`, `Likely unripe`. The fruit does not ripen or sweeten after picking. Treat the hint as low confidence when the field spot is missing, the room is noisy, or the fruit is extreme in size. How the photo and the knocks are combined is a product choice, not a result from any paper.
 - **Multi-language Localization**: Fully localized in Catalan (`ca`), Spanish (`es`), and English (`en`).
 - **PWA & Offline-Ready**: Installable on iOS/Android/desktop with service worker caching and offline-first fallback.
 - **Post-Consumption Feedback Loop**: Rate watermelon taste after cutting to log validation data.

@@ -322,7 +322,7 @@ describe('Back from Knock to Photo', () => {
     await screen.findByRole('heading', { name: en.knockTitle });
     fireEvent.click(screen.getByRole('button', { name: en.knockSkip }));
 
-    expect(await screen.findByText(en.verdictRipe)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: en.verdictRipe })).toBeTruthy();
     expect(stepStatus('result')).toBe('current');
     expect(idb.put).toHaveBeenCalledTimes(1);
     const saved = idb.put.mock.calls[0][1] as unknown as {
@@ -353,7 +353,7 @@ describe('Back from Knock to Photo', () => {
     const finish = await screen.findByRole('button', { name: /Finish with/ });
     fireEvent.click(finish);
 
-    expect(await screen.findByText(en.verdictRipe)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: en.verdictRipe })).toBeTruthy();
     expect(idb.put).toHaveBeenCalledTimes(1);
     const saved = idb.put.mock.calls[0][1] as unknown as {
       result: { audioFeatures: { knockCount: number } };

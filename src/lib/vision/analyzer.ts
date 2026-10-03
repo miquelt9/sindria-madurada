@@ -135,7 +135,7 @@ function evaluateGroundSpot(
 
 /**
  * Analyzes cropped image data for watermelon ripeness visual cues:
- * 1. Ground spot yellowness (creamy butter yellow vs pale/white)
+ * 1. Field spot as a stage cue (existing heuristic; copy must say loss of green, not sweetness)
  * 2. Ribbon/stripe contrast (local variance between light and dark rind bands)
  * 3. Surface dullness vs specular shine (mature melons have a matte/dull rind)
  *
@@ -220,11 +220,11 @@ export function analyzeWatermelonImage(
   }
 
   if (groundSpotDetected && groundSpotScore > 0.65) {
-    notes.push('Yellow butter ground spot detected (strong ripeness indicator)');
+    notes.push('Field spot shows loss of green against the rind (stage cue, not sweetness)');
   } else if (groundSpotDetected && groundSpotScore < 0.4) {
-    notes.push('Pale/white ground spot detected (likely under-ripe vine detachment)');
+    notes.push('Field spot still looks green against the rind (stage cue, not sweetness)');
   } else {
-    notes.push('Ground spot not clearly exposed in photo (check underside)');
+    notes.push('Field spot is not clearly in frame (prefer a frame that shows it)');
   }
 
   if (stripeContrastScore > 0.6) {
@@ -234,9 +234,9 @@ export function analyzeWatermelonImage(
   }
 
   if (dullnessScore > 0.7) {
-    notes.push('Dull matte rind surface (mature sugar accumulation)');
+    notes.push('Rind looks dull. A dull rind does not mean ripe for every cultivar');
   } else {
-    notes.push('Shiny reflective rind (characteristic of earlier growth)');
+    notes.push('Rind looks shiny. Shine is not a ripeness rule for every cultivar');
   }
 
   return {

@@ -8,8 +8,11 @@ export async function generateShareCardBlob(
     scoreLabel: string;
     verdictLabel: string;
     eatWindow: string;
+    eatWindowValue?: string;
     visualLabel: string;
     audioLabel: string;
+    firmnessLabel?: string;
+    cardSubtitle?: string;
   }
 ): Promise<Blob | null> {
   if (typeof document === 'undefined') return null;
@@ -41,7 +44,7 @@ export async function generateShareCardBlob(
   // Subtitle
   ctx.fillStyle = isDark ? '#9EB3A4' : '#6E6152';
   ctx.font = '14px DM Sans, sans-serif, system-ui';
-  ctx.fillText('Watermelon Ripeness Assessment', width / 2, 85);
+  ctx.fillText(labels?.cardSubtitle || 'Coarse stage and texture hint', width / 2, 85);
 
   let currentY = 120;
 
@@ -116,8 +119,8 @@ export async function generateShareCardBlob(
   ctx.textAlign = 'center';
   const audioSummary =
     result.audioFeatures.knockCount > 0
-      ? `${labels?.audioLabel || 'Audio'}: ${result.audioScore}% (${result.audioFeatures.peakFrequencyHz} Hz)`
-      : `${labels?.audioLabel || 'Audio'}: —`;
+      ? `${labels?.audioLabel || 'Firmness'}: ${labels?.firmnessLabel || '—'}`
+      : `${labels?.audioLabel || 'Firmness'}: —`;
   ctx.fillText(
     `${labels?.visualLabel || 'Visual'}: ${result.visualScore}%  •  ${audioSummary}`,
     width / 2,
@@ -138,7 +141,7 @@ export async function generateShareCardBlob(
 
   ctx.fillStyle = isDark ? '#FFFFFF' : '#141E17';
   ctx.font = 'bold 16px DM Sans, sans-serif, system-ui';
-  ctx.fillText(result.eatWindowLabel, width / 2, currentY + 54);
+  ctx.fillText(labels?.eatWindowValue || result.eatWindowLabel, width / 2, currentY + 54);
 
   // Footer
   ctx.fillStyle = isDark ? '#6B7F72' : '#9C8F7E';

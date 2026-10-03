@@ -88,6 +88,9 @@ export interface Translations {
   groundSpot: string;
   acousticKnock: string;
   resonantTone: string;
+  firmnessDull: string;
+  firmnessTight: string;
+  firmnessUnclear: string;
   knocksRegistered: string;
   detailedObservations: string;
   eatingWindow: string;
