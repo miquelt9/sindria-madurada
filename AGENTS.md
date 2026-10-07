@@ -11,6 +11,9 @@ Welcome to **Síndria madurada** (Catalan for "Ripe Watermelon"), a guest-first,
 
 ## Documentation Map
 
+- `.agents/AGENTS.md` — How to change this repo. Prefer `.agents/` over `.cursor/rules`.
+- `.agents/ARCHITECTURE.md` — Short app map. Depth stays in `docs/memory/architecture.md`.
+- `.agents/DESIGN.md` — Look intent. Keep the current UI.
 - `docs/memory/product.md` — Product vision, UX flows, guest model, and feedback loop.
 - `docs/memory/research.md` — Scientific foundations, acoustic frequencies, rind texture analysis, and references.
 - `docs/memory/architecture.md` — Technical architecture, Web Audio API FFT pipeline, Canvas CV heuristics, IndexedDB storage.
