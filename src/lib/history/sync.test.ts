@@ -82,12 +82,34 @@ describe('sync gates', () => {
     expect(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY)).toBe('[{"kind":"scan"}]');
   });
 
-  it.skip('keeps a scan that is enqueued while a flush is in flight', () => {
-    // Bug: flushSyncQueue snapshots the queue, then persistQueue writes that
-    // snapshot back when the request finishes. A scan appended during the
-    // request is deleted, and the in-flight flush is reused so the new item
-    // is never sent. Reproduce with VITE_API_URL set, consent on, and a fetch
-    // that resolves only after a second enqueueScanSync.
+  it.fails('keeps a scan that is enqueued while a flush is in flight', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://api.example.test');
+    try {
+      setShareConsent(true);
+      let releaseFetch: (response: Response) => void = () => {};
+      const fetchMock = vi.fn((url: string, init?: { body?: string }) => {
+        expect(String(url)).toBe('https://api.example.test/scans');
+        expect(JSON.parse(String(init?.body)).id).toBe('melon-1');
+        return new Promise<Response>((resolve) => {
+          releaseFetch = resolve;
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      enqueueScanSync(scan('melon-1'));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      enqueueScanSync(scan('melon-2'));
+      releaseFetch(new Response(null, { status: 200 }));
+      await flushSyncQueue();
+
+      const queued = JSON.parse(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY) ?? '[]') as Array<{
+        payload?: { id?: string };
+      }>;
+      expect(queued.map((item) => item.payload?.id)).toEqual(['melon-2']);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('drops a corrupt queue entry instead of rejecting every later flush', async () => {
