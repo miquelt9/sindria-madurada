@@ -122,10 +122,8 @@ describe('analyzeFrame', () => {
     expect(stats.meanHopRms).toBeCloseTo(Math.sqrt(0.5) / 2);
   });
 
-  it.skip('rejects a zero hop instead of looping forever', () => {
-    // Bug: the hop loop advances with `i += hop`. A hop of 0 never moves,
-    // so analyzeFrame(frame, 0) does not return.
-  });
+  // A hop of 0 never advances `i += hop`, so a live assertion would hang the runner.
+  it.todo('rejects a zero hop instead of looping forever');
 });
 
 describe('KnockDetector', () => {
