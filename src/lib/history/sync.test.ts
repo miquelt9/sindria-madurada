@@ -87,12 +87,13 @@ describe('sync gates', () => {
     try {
       setShareConsent(true);
       let releaseFetch: (response: Response) => void = () => {};
-      const fetchMock = vi.fn(
-        () =>
-          new Promise<Response>((resolve) => {
-            releaseFetch = resolve;
-          }),
-      );
+      const fetchMock = vi.fn((url: string, init?: { body?: string }) => {
+        expect(String(url)).toBe('https://api.example.test/scans');
+        expect(JSON.parse(String(init?.body)).id).toBe('melon-1');
+        return new Promise<Response>((resolve) => {
+          releaseFetch = resolve;
+        });
+      });
       vi.stubGlobal('fetch', fetchMock);
 
       enqueueScanSync(scan('melon-1'));
@@ -106,8 +107,6 @@ describe('sync gates', () => {
         payload?: { id?: string };
       }>;
       expect(queued.map((item) => item.payload?.id)).toEqual(['melon-2']);
-      const init = fetchMock.mock.calls[0]?.[1] as { body?: string } | undefined;
-      expect(JSON.parse(String(init?.body)).id).toBe('melon-1');
     } finally {
       vi.unstubAllEnvs();
     }
