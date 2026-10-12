@@ -107,4 +107,98 @@ describe('Vision Heuristics & Multimodal Fusion', () => {
     expect(withBelly.stripeContrastScore).toBe(rindOnly.stripeContrastScore);
     expect(withBelly.notes.some((n) => /underside photo/i.test(n))).toBe(true);
   });
+
+  it('converts the primary colors and black and white', () => {
+    expect(rgbToHsv(0, 0, 0)).toEqual({ h: 0, s: 0, v: 0 });
+    expect(rgbToHsv(255, 255, 255)).toEqual({ h: 0, s: 0, v: 1 });
+    expect(rgbToHsv(255, 0, 0)).toEqual({ h: 0, s: 1, v: 1 });
+    expect(rgbToHsv(0, 255, 0)).toEqual({ h: 120, s: 1, v: 1 });
+    expect(rgbToHsv(0, 0, 255)).toEqual({ h: 240, s: 1, v: 1 });
+    expect(rgbToHsv(255, 255, 0).h).toBeCloseTo(60);
+  });
+
+  it('returns a neutral result when the image has no pixels', () => {
+    const empty = analyzeWatermelonImage(fill(0, 0, [0, 0, 0]));
+    expect(empty).toEqual({
+      stripeContrastScore: 0.5,
+      groundSpotScore: 0.5,
+      dullnessScore: 0.5,
+      groundSpotDetected: false,
+      notes: ['No image data provided'],
+    });
+    expect(analyzeWatermelonImage(fill(0, 8, [255, 0, 0])).notes).toEqual(['No image data provided']);
+  });
+
+  it('scores a single dark pixel as dull, with no stripe samples and no field spot', () => {
+    const visual = analyzeWatermelonImage(fill(1, 1, [0, 0, 0]));
+    expect(visual.stripeContrastScore).toBe(0);
+    expect(visual.groundSpotDetected).toBe(false);
+    expect(visual.groundSpotScore).toBe(0.5);
+    expect(visual.dullnessScore).toBe(1);
+  });
+
+  it('detects a pale field spot only after it covers more than 4% of the frame', () => {
+    const below = analyzeWatermelonImage(mixed(0, 4));
+    const above = analyzeWatermelonImage(mixed(0, 5));
+    expect(below.groundSpotDetected).toBe(false);
+    expect(below.groundSpotScore).toBe(0.5);
+    expect(above.groundSpotDetected).toBe(true);
+    expect(above.groundSpotScore).toBe(0.25);
+  });
+
+  it('detects a yellow field spot only after it covers more than 2% of the frame', () => {
+    const below = analyzeWatermelonImage(mixed(2, 0));
+    const above = analyzeWatermelonImage(mixed(3, 0));
+    const yellowWins = analyzeWatermelonImage(mixed(3, 50));
+    expect(below.groundSpotDetected).toBe(false);
+    expect(above.groundSpotDetected).toBe(true);
+    expect(above.groundSpotScore).toBeCloseTo(0.375);
+    expect(yellowWins.groundSpotScore).toBeCloseTo(0.375);
+  });
+
+  it('keeps an out-of-range tap from throwing and scores a tap on a yellow frame', () => {
+    const outside = analyzeWatermelonImage(fill(20, 20, [240, 200, 60]), { x: 2, y: -1 });
+    expect(outside.groundSpotDetected).toBe(false);
+    expect(outside.groundSpotScore).toBe(0);
+
+    const inside = analyzeWatermelonImage(fill(20, 20, [240, 200, 60]), { x: 0.5, y: 0.5 });
+    expect(inside.groundSpotDetected).toBe(true);
+    expect(inside.groundSpotScore).toBe(1);
+  });
+
+  it('scores the field spot from the belly photo when a rind tap is also present', () => {
+    const rind = fill(20, 20, [240, 200, 60]);
+    const belly = fill(20, 20, [20, 80, 30]);
+    const visual = analyzeWatermelonImage(rind, {
+      customSpotPoint: { x: 0.5, y: 0.5 },
+      groundSpotImage: belly,
+    });
+    expect(visual.groundSpotDetected).toBe(false);
+    expect(visual.notes.some((note) => /underside photo/i.test(note))).toBe(true);
+  });
 });
+
+function fill(width: number, height: number, rgb: [number, number, number]) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < width * height; i += 1) {
+    data[i * 4] = rgb[0];
+    data[i * 4 + 1] = rgb[1];
+    data[i * 4 + 2] = rgb[2];
+    data[i * 4 + 3] = 255;
+  }
+  return { data, width, height, colorSpace: 'srgb' as PredefinedColorSpace };
+}
+
+function mixed(yellowCount: number, whiteCount: number, total = 100) {
+  const data = new Uint8ClampedArray(total * 4);
+  for (let i = 0; i < total; i += 1) {
+    let rgb: [number, number, number] = [20, 80, 30];
+    if (i < yellowCount) rgb = [240, 200, 60];
+    else if (i < yellowCount + whiteCount) rgb = [240, 230, 210];
+    data[i * 4] = rgb[0];
+    data[i * 4 + 1] = rgb[1];
+    data[i * 4 + 2] = rgb[2];
+    data[i * 4 + 3] = 255;
+  }
+  return { data, width: total, height: 1, colorSpace: 'srgb' as PredefinedColorSpace };
+}

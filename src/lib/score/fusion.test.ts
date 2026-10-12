@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { fuseRipenessSignals } from './fusion';
-import { VisualFeatures, AudioFeatures } from '../types';
+import { fuseRipenessSignals, ripePeakMaxHz } from './fusion';
+import { VisualFeatures, AudioFeatures, MelonSize } from '../types';
 
 function visual(overrides: Partial<VisualFeatures> = {}): VisualFeatures {
   return {
@@ -104,5 +104,182 @@ describe('fuseRipenessSignals', () => {
     expect(fused.visualScore).toBe(explicit.visualScore);
     expect(fused.audioScore).toBe(explicit.audioScore);
     expect(fused.overallScore).toBe(explicit.overallScore);
+  });
+});
+
+describe('ripePeakMaxHz', () => {
+  it('widens the dull band only for a small melon', () => {
+    expect(ripePeakMaxHz('small')).toBe(250);
+    expect(ripePeakMaxHz('medium')).toBe(210);
+    expect(ripePeakMaxHz('large')).toBe(210);
+    expect(ripePeakMaxHz()).toBe(210);
+  });
+});
+
+describe('fuseRipenessSignals boundaries', () => {
+  function flat(score: number, detected = true) {
+    return fuseRipenessSignals(
+      visual({
+        stripeContrastScore: score,
+        groundSpotScore: score,
+        dullnessScore: score,
+        groundSpotDetected: detected,
+      }),
+      audio({ knockCount: 0, acousticRipenessScore: 0.1, peakFrequencyHz: 0 }),
+    );
+  }
+
+  it('cuts likely ripe at 68 and likely unripe at 46', () => {
+    expect(flat(0.68).overallScore).toBe(68);
+    expect(flat(0.68).verdict).toBe('likely_ripe');
+    expect(flat(0.67).overallScore).toBe(67);
+    expect(flat(0.67).verdict).toBe('borderline');
+    expect(flat(0.47).overallScore).toBe(47);
+    expect(flat(0.47).verdict).toBe('borderline');
+    expect(flat(0.46).overallScore).toBe(46);
+    expect(flat(0.46).verdict).toBe('likely_unripe');
+  });
+
+  it('uses the photo alone when fewer than one knock was counted', () => {
+    const fused = fuseRipenessSignals(
+      visual({ stripeContrastScore: 0.8, groundSpotScore: 0.8, dullnessScore: 0.8 }),
+      audio({ knockCount: 0, acousticRipenessScore: 0.1, peakFrequencyHz: 0 }),
+    );
+    expect(fused.overallScore).toBe(80);
+    expect(fused.audioScore).toBe(10);
+    expect(fused.confidence).toBe(60);
+    expect(fused.actionableTips.some((tip) => /knock/i.test(tip))).toBe(false);
+
+    const missingSpot = fuseRipenessSignals(
+      visual({
+        stripeContrastScore: 0.2,
+        groundSpotScore: 0.2,
+        dullnessScore: 0.2,
+        groundSpotDetected: false,
+      }),
+      audio({ knockCount: -1, acousticRipenessScore: 0.9, peakFrequencyHz: 0 }),
+    );
+    expect(missingSpot.overallScore).toBe(20);
+    expect(missingSpot.confidence).toBe(45);
+    expect(missingSpot.verdict).toBe('likely_unripe');
+  });
+
+  it('weights a single knock at 65/35 and pins its confidence at 65', () => {
+    const fused = fuseRipenessSignals(
+      visual({ stripeContrastScore: 1, groundSpotScore: 1, dullnessScore: 1 }),
+      audio({ knockCount: 1, acousticRipenessScore: 0, peakFrequencyHz: 0 }),
+    );
+    expect(fused.visualScore).toBe(100);
+    expect(fused.audioScore).toBe(0);
+    expect(fused.overallScore).toBe(65);
+    expect(fused.confidence).toBe(65);
+    expect(fused.verdict).toBe('borderline');
+  });
+
+  it('caps confidence at 92 once several knocks and a field spot are present', () => {
+    expect(fuseRipenessSignals(visual(), audio({ knockCount: 2 })).confidence).toBe(91);
+    expect(
+      fuseRipenessSignals(visual({ groundSpotDetected: false }), audio({ knockCount: 2 })).confidence,
+    ).toBe(81);
+    expect(fuseRipenessSignals(visual(), audio({ knockCount: 3 })).confidence).toBe(92);
+    expect(fuseRipenessSignals(visual(), audio({ knockCount: 10 })).confidence).toBe(92);
+  });
+
+  it('lifts only the small-melon band between 210 and 250 Hz, and stops at 1', () => {
+    const extended = audio({ peakFrequencyHz: 250, acousticRipenessScore: 0.6, knockCount: 3 });
+    const small = fuseRipenessSignals(visual(), extended, { size: 'small' });
+    const large = fuseRipenessSignals(visual(), extended, { size: 'large' });
+    expect(small.audioScore).toBe(85);
+    expect(large.audioScore).toBe(60);
+
+    const below = fuseRipenessSignals(
+      visual(),
+      audio({ peakFrequencyHz: 210, acousticRipenessScore: 0.6, knockCount: 3 }),
+      { size: 'small' },
+    );
+    const above = fuseRipenessSignals(
+      visual(),
+      audio({ peakFrequencyHz: 251, acousticRipenessScore: 0.6, knockCount: 3 }),
+      { size: 'small' },
+    );
+    expect(below.audioScore).toBe(60);
+    expect(above.audioScore).toBe(60);
+
+    const capped = fuseRipenessSignals(
+      visual(),
+      audio({ peakFrequencyHz: 230, acousticRipenessScore: 0.9, knockCount: 3 }),
+      { size: 'small' },
+    );
+    expect(capped.audioScore).toBe(100);
+  });
+
+  it.each([
+    ['medium', 115, true, false],
+    ['medium', 210, true, false],
+    ['medium', 211, false, false],
+    ['medium', 250, false, false],
+    ['medium', 251, false, true],
+    ['small', 250, true, false],
+    ['small', 290, false, false],
+    ['small', 291, false, true],
+    ['large', 210, true, false],
+    ['large', 251, false, true],
+  ] as const)('%s peak %s Hz dull tip %s, tight tip %s', (size, peak, dull, tight) => {
+    const fused = fuseRipenessSignals(visual(), audio({ peakFrequencyHz: peak, knockCount: 3 }), {
+      size: size as MelonSize,
+    });
+    expect(fused.actionableTips.some((tip) => /sound dull rather than tight/i.test(tip))).toBe(dull);
+    expect(fused.actionableTips.some((tip) => /sound tight rather than dull/i.test(tip))).toBe(tight);
+    if (dull && size === 'small') {
+      expect(fused.actionableTips.some((tip) => /smaller melon/i.test(tip))).toBe(true);
+    }
+  });
+
+  it('mentions ribbon stripes only below 0.4 on striped fruit', () => {
+    const atBoundary = fuseRipenessSignals(
+      visual({ stripeContrastScore: 0.4, groundSpotScore: 0.9, dullnessScore: 0.9 }),
+      audio({ peakFrequencyHz: 160 }),
+      { variety: 'striped' },
+    );
+    const below = fuseRipenessSignals(
+      visual({ stripeContrastScore: 0.399, groundSpotScore: 0.9, dullnessScore: 0.9 }),
+      audio({ peakFrequencyHz: 160 }),
+      { variety: 'striped' },
+    );
+    expect(atBoundary.actionableTips.some((tip) => /ribbon stripes/i.test(tip))).toBe(false);
+    expect(below.actionableTips.some((tip) => /ribbon stripes/i.test(tip))).toBe(true);
+  });
+
+  it('switches the field-spot tip at a detected score of 0.5', () => {
+    const present = fuseRipenessSignals(
+      visual({ groundSpotScore: 0.5, groundSpotDetected: true }),
+      audio(),
+    );
+    const faint = fuseRipenessSignals(
+      visual({ groundSpotScore: 0.499, groundSpotDetected: true }),
+      audio(),
+    );
+    const missing = fuseRipenessSignals(
+      visual({ groundSpotScore: 0.9, groundSpotDetected: false }),
+      audio(),
+    );
+    expect(present.actionableTips[0]).toMatch(/field spot is in frame/i);
+    expect(faint.actionableTips[0]).toMatch(/prefer a frame that shows the field spot/i);
+    expect(missing.actionableTips[0]).toMatch(/prefer a frame that shows the field spot/i);
+  });
+
+  it('sends a non-finite composite to borderline', () => {
+    const fused = fuseRipenessSignals(
+      visual({
+        stripeContrastScore: Number.NaN,
+        groundSpotScore: Number.NaN,
+        dullnessScore: Number.NaN,
+      }),
+      audio({ knockCount: Number.NaN }),
+    );
+    expect(fused.verdict).toBe('borderline');
+    expect(fused.confidence).toBe(60);
+    expect(fused.eatFromDays).toBe(1);
+    expect(fused.eatUntilDays).toBe(3);
   });
 });
