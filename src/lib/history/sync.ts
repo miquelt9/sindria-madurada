@@ -116,6 +116,10 @@ function enqueue(item: QueueItem): void {
   persistQueue(queue.slice(-MAX_QUEUE_ITEMS));
 }
 
+function sameQueueItem(a: QueueItem, b: QueueItem): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function eatWindowFrom(scan: MelonScanRecord): EatWindow {
   const result = scan.result;
   return {
@@ -186,23 +190,36 @@ export async function flushSyncQueue(): Promise<void> {
   }
   flushInFlight = (async () => {
     const queue = loadQueue();
-    const remaining: QueueItem[] = [];
+    const handled: Array<{ original: QueueItem; replacement: QueueItem | null }> = [];
     for (let i = 0; i < queue.length; i += 1) {
       const item = queue[i];
       const outcome = await sendItem(item);
       if (outcome === 'ok' || outcome === 'drop') {
+        handled.push({ original: item, replacement: null });
         continue;
       }
       const attempts = (item.attempts ?? 0) + 1;
       if (attempts < MAX_ATTEMPTS) {
-        remaining.push({ ...item, attempts });
-        remaining.push(...queue.slice(i + 1));
+        handled.push({ original: item, replacement: { ...item, attempts } });
       } else {
-        remaining.push(...queue.slice(i + 1));
+        handled.push({ original: item, replacement: null });
       }
       break;
     }
-    persistQueue(remaining);
+    // Rewrite from the queue as it is now so an enqueue during sendItem is kept.
+    const next = loadQueue();
+    for (const action of handled) {
+      const index = next.findIndex((candidate) => sameQueueItem(candidate, action.original));
+      if (index === -1) {
+        continue;
+      }
+      if (action.replacement === null) {
+        next.splice(index, 1);
+      } else {
+        next[index] = action.replacement;
+      }
+    }
+    persistQueue(next);
   })().finally(() => {
     flushInFlight = null;
   });
