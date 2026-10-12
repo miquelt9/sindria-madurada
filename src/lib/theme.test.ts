@@ -45,7 +45,7 @@ describe('getStoredTheme', () => {
     expect(getSystemTheme()).toBe('light');
   });
 
-  it.skip('falls back to system when theme storage throws', () => {
+  it('falls back to system when theme storage throws', () => {
     // Bug: getStoredTheme calls localStorage.getItem with no try/catch.
     // A throwing storage API (disabled storage, some private-mode browsers)
     // rejects the ThemeProvider state initializer instead of using system.

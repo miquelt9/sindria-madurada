@@ -5,9 +5,13 @@ export const THEME_STORAGE_KEY = 'sindria-theme';
 
 export function getStoredTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'system';
-  const saved = localStorage.getItem(THEME_STORAGE_KEY);
-  if (saved === 'light' || saved === 'dark' || saved === 'system') {
-    return saved;
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === 'light' || saved === 'dark' || saved === 'system') {
+      return saved;
+    }
+  } catch {
+    return 'system';
   }
   return 'system';
 }
