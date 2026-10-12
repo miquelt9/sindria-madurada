@@ -90,9 +90,29 @@ describe('sync gates', () => {
     // that resolves only after a second enqueueScanSync.
   });
 
-  it.skip('drops a corrupt queue entry instead of rejecting every later flush', () => {
-    // Bug: sendItem reads item.kind outside its try/catch. A null entry
-    // rejects flushSyncQueue before persistQueue, so the bad value stays in
-    // localStorage and every later flush fails the same way.
+  it('drops a corrupt queue entry instead of rejecting every later flush', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://api.example.test');
+    try {
+      setShareConsent(true);
+      const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const valid = { kind: 'scan', payload: { id: 'melon-ok' }, attempts: 0 };
+      localStorage.setItem(SYNC_QUEUE_STORAGE_KEY, JSON.stringify([null, valid]));
+
+      await flushSyncQueue();
+      expect(JSON.parse(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY) ?? 'null')).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      localStorage.setItem(
+        SYNC_QUEUE_STORAGE_KEY,
+        JSON.stringify([{ kind: 'scan', payload: { id: 'melon-later' }, attempts: 0 }]),
+      );
+      await flushSyncQueue();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY) ?? 'null')).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

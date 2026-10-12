@@ -51,9 +51,17 @@ type QueueItem =
 let flushInFlight: Promise<void> | null = null;
 let listenersBound = false;
 
+declare global {
+  interface ImportMeta {
+    readonly env: {
+      readonly VITE_API_URL?: string;
+    };
+  }
+}
+
 function getApiUrl(): string {
-  const env = (import.meta as { env?: Record<string, unknown> }).env;
-  const raw = env?.VITE_API_URL;
+  // Direct access so Vite inlines the value and Vitest's env stub can see it.
+  const raw = import.meta.env.VITE_API_URL;
   return typeof raw === 'string' ? raw.trim().replace(/\/+$/, '') : '';
 }
 
@@ -155,10 +163,20 @@ function dropClientError(status: number): boolean {
 }
 
 async function sendItem(item: QueueItem): Promise<'ok' | 'drop' | 'retry'> {
-  const base = getApiUrl();
-  const url =
-    item.kind === 'scan' ? `${base}/scans` : `${base}/scans/${encodeURIComponent(item.id)}/feedback`;
-  const method = item.kind === 'scan' ? 'POST' : 'PATCH';
+  let url: string;
+  let method: string;
+  try {
+    if (!item || (item.kind !== 'scan' && item.kind !== 'feedback')) {
+      return 'drop';
+    }
+    const base = getApiUrl();
+    url =
+      item.kind === 'scan' ? `${base}/scans` : `${base}/scans/${encodeURIComponent(item.id)}/feedback`;
+    method = item.kind === 'scan' ? 'POST' : 'PATCH';
+  } catch {
+    return 'drop';
+  }
+
   try {
     const response = await fetch(url, {
       method,
