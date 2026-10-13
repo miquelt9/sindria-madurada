@@ -46,9 +46,6 @@ describe('getStoredTheme', () => {
   });
 
   it('falls back to system when theme storage throws', () => {
-    // Bug: getStoredTheme calls localStorage.getItem with no try/catch.
-    // A throwing storage API (disabled storage, some private-mode browsers)
-    // rejects the ThemeProvider state initializer instead of using system.
     vi.stubGlobal('localStorage', {
       getItem: () => {
         throw new Error('storage disabled');

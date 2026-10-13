@@ -11,7 +11,7 @@ export function getStoredTheme(): ThemeMode {
       return saved;
     }
   } catch {
-    return 'system';
+    // Fall through when storage throws.
   }
   return 'system';
 }
