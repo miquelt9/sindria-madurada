@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { RipenessVerdict } from '../types';
 import { eatingWindowForVerdict } from './eatingWindow';
 
 describe('eatingWindowForVerdict', () => {
@@ -24,5 +25,9 @@ describe('eatingWindowForVerdict', () => {
     expect(w.eatUntilDays).toBe(4);
     expect(w.willNotRipenOffVine).toBe(true);
     expect(w.eatWindowLabel.toLowerCase()).toMatch(/will not ripen off the vine/);
+  });
+
+  it('returns undefined for a verdict outside the three-way scale', () => {
+    expect(eatingWindowForVerdict('ripe' as RipenessVerdict)).toBeUndefined();
   });
 });

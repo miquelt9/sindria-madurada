@@ -20,6 +20,24 @@ describe('scan stepper state', () => {
     expect(isScanFlowStep('photo')).toBe(true);
     expect(isScanFlowStep('knock')).toBe(true);
     expect(isScanFlowStep('result')).toBe(true);
+    expect(isScanFlowStep('')).toBe(false);
+    expect(isScanFlowStep('Photo')).toBe(false);
+    expect(isScanFlowStep('KNOCK')).toBe(false);
+    expect(isScanFlowStep('home ')).toBe(false);
+  });
+
+  it('names the three steps in order for every current step', () => {
+    for (const current of ['photo', 'knock', 'result'] as const) {
+      expect(scanStepperItems(current).map((item) => item.step)).toEqual(['photo', 'knock', 'result']);
+    }
+  });
+
+  it('marks every step upcoming when the current id is not in the flow', () => {
+    expect(scanStepperItems('home' as ScanFlowStep).map((item) => item.status)).toEqual([
+      'upcoming',
+      'upcoming',
+      'upcoming',
+    ]);
   });
 
   it('marks the current step and treats earlier steps as completed', () => {

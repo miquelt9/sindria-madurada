@@ -53,4 +53,21 @@ describe('backFromKnock', () => {
     expect(backFromKnock(home)).toBe(home);
     expect(backFromKnock(history)).toBe(history);
   });
+
+  it('does not mutate the knock draft it copies', () => {
+    const state = { step: 'knock' as const, croppedPhotoUrl: 'data:image/jpeg;base64,CROP', note: 'keep' };
+    const next = backFromKnock(state);
+    expect(next).not.toBe(state);
+    expect(next.step).toBe('photo');
+    expect(next.croppedPhotoUrl).toBe(state.croppedPhotoUrl);
+    expect(next.note).toBe('keep');
+    expect(state.step).toBe('knock');
+  });
+
+  it('treats a blank or differently cased step as outside the knock screen', () => {
+    const blank = { step: '', croppedPhotoUrl: 'data:image/jpeg;base64,X' };
+    const cased = { step: 'Knock', croppedPhotoUrl: null };
+    expect(backFromKnock(blank)).toBe(blank);
+    expect(backFromKnock(cased)).toBe(cased);
+  });
 });

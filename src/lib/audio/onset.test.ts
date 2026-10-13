@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FRAME_SIZE, detectKnocksInPcm } from './onset';
+import { FRAME_SIZE, HOP_SIZE, KnockDetector, analyzeFrame, detectKnocksInPcm } from './onset';
 import { extractAbbaszadehFeatures } from './features';
 import { applyHann, fftMagnitudes } from './fft';
 
@@ -96,5 +96,101 @@ describe('Knock window FFT', () => {
 
     expect(features.peakFrequencyHz).toBeGreaterThan(140);
     expect(features.peakFrequencyHz).toBeLessThan(180);
+  });
+});
+
+describe('analyzeFrame', () => {
+  it('returns zeros for an empty frame', () => {
+    expect(analyzeFrame(new Float32Array())).toEqual({
+      frameRms: 0,
+      peakHopRms: 0,
+      meanHopRms: 0,
+    });
+  });
+
+  it('uses the whole frame when it is shorter than one hop', () => {
+    const stats = analyzeFrame(new Float32Array([0.3, 0.4]));
+    expect(stats.frameRms).toBeCloseTo(Math.sqrt(0.125));
+    expect(stats.peakHopRms).toBeCloseTo(stats.frameRms);
+    expect(stats.meanHopRms).toBeCloseTo(stats.frameRms);
+  });
+
+  it('reports the loudest hop separately from the frame average', () => {
+    const stats = analyzeFrame(new Float32Array([0, 0, 0.6, 0.8]), 2);
+    expect(stats.frameRms).toBeCloseTo(0.5);
+    expect(stats.peakHopRms).toBeCloseTo(Math.sqrt(0.5));
+    expect(stats.meanHopRms).toBeCloseTo(Math.sqrt(0.5) / 2);
+  });
+
+  // A hop of 0 never advances `i += hop`, so a live assertion would hang the runner.
+  it.todo('rejects a zero hop instead of looping forever');
+});
+
+describe('KnockDetector', () => {
+  function spikeFrame(): Float32Array {
+    const frame = new Float32Array(FRAME_SIZE);
+    for (let i = 0; i < HOP_SIZE; i += 1) {
+      frame[i] = 0.2;
+    }
+    return frame;
+  }
+
+  it('ignores an empty push and a buffer shorter than one frame', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    expect(detector.pushFrame(new Float32Array())).toBe(false);
+    expect(detector.knockCount).toBe(0);
+
+    const { knockCount, spectra } = detectKnocksInPcm(new Float32Array(FRAME_SIZE - 1), SAMPLE_RATE);
+    expect(knockCount).toBe(0);
+    expect(spectra).toEqual([]);
+  });
+
+  it('ignores spikes during warmup, debounces for 400 ms, and stops at three', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    for (let i = 0; i < 4; i += 1) {
+      expect(detector.pushFrame(spikeFrame())).toBe(false);
+    }
+    expect(detector.knockCount).toBe(0);
+
+    expect(detector.pushFrame(spikeFrame())).toBe(true);
+    for (let i = 5; i < 12; i += 1) {
+      expect(detector.pushFrame(new Float32Array(FRAME_SIZE))).toBe(false);
+    }
+    expect(detector.pushFrame(spikeFrame())).toBe(false);
+    expect(detector.knockCount).toBe(1);
+    expect(detector.pushFrame(spikeFrame())).toBe(true);
+    expect(detector.knockCount).toBe(2);
+
+    const capped = new KnockDetector(1000);
+    let accepts = 0;
+    for (let i = 0; i < 10; i += 1) {
+      if (capped.pushFrame(spikeFrame())) accepts += 1;
+    }
+    expect(accepts).toBe(3);
+    expect(capped.knockCount).toBe(3);
+    expect(capped.pushFrame(spikeFrame())).toBe(false);
+    expect(capped.captureManualKnock()).toBe(false);
+  });
+
+  it('captures one manual knock after a frame of audio and then honors the debounce', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    expect(detector.captureManualKnock()).toBe(false);
+    detector.pushFrame(new Float32Array(FRAME_SIZE));
+    expect(detector.captureManualKnock()).toBe(true);
+    expect(detector.captureManualKnock()).toBe(false);
+    expect(detector.knockCount).toBe(1);
+    expect(detector.spectra).toHaveLength(1);
+  });
+
+  it('reset clears knocks, the noise floor, and the live level', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    detector.pushFrame(spikeFrame());
+    detector.liveRms = 0.2;
+    detector.reset();
+    expect(detector.knockCount).toBe(0);
+    expect(detector.spectra).toEqual([]);
+    expect(detector.noiseFloor).toBe(0.005);
+    expect(detector.liveRms).toBe(0);
+    expect(detector.captureManualKnock()).toBe(false);
   });
 });
