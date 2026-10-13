@@ -125,7 +125,12 @@ function enqueue(item: QueueItem): void {
 }
 
 function sameQueueItem(a: QueueItem, b: QueueItem): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (a.kind !== b.kind) {
+    return false;
+  }
+  const id = a.kind === 'scan' ? a.payload.id : a.id;
+  const otherId = b.kind === 'scan' ? b.payload.id : b.id;
+  return id === otherId;
 }
 
 function eatWindowFrom(scan: MelonScanRecord): EatWindow {
