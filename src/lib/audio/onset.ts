@@ -171,8 +171,8 @@ export class KnockDetector {
 }
 
 export function analyzeFrame(frame: Float32Array, hop = HOP_SIZE): FrameStats {
-  if (hop <= 0) {
-    throw new RangeError('hop must be greater than 0');
+  if (!Number.isInteger(hop) || hop <= 0) {
+    throw new RangeError('hop must be a positive whole number');
   }
 
   let sumSq = 0;
