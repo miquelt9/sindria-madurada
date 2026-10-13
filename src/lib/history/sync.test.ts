@@ -142,7 +142,11 @@ describe('sync gates', () => {
     vi.stubEnv('VITE_API_URL', 'https://api.example.test');
     try {
       setShareConsent(true);
-      const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+      const seenUrls: string[] = [];
+      const fetchMock = vi.fn(async (url: string) => {
+        seenUrls.push(url);
+        return new Response(null, { status: 200 });
+      });
       vi.stubGlobal('fetch', fetchMock);
 
       localStorage.setItem(
@@ -158,7 +162,7 @@ describe('sync gates', () => {
       await flushSyncQueue();
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(String(fetchMock.mock.calls[0]?.[0])).toBe('https://api.example.test/scans');
+      expect(seenUrls).toEqual(['https://api.example.test/scans']);
       expect(JSON.parse(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY) ?? 'null')).toEqual([]);
     } finally {
       vi.unstubAllEnvs();
