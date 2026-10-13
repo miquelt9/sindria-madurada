@@ -169,6 +169,9 @@ async function sendItem(item: QueueItem): Promise<'ok' | 'drop' | 'retry'> {
     if (!item || (item.kind !== 'scan' && item.kind !== 'feedback')) {
       return 'drop';
     }
+    if (item.kind === 'feedback' && (typeof item.id !== 'string' || item.id.length === 0)) {
+      return 'drop';
+    }
     const base = getApiUrl();
     url =
       item.kind === 'scan' ? `${base}/scans` : `${base}/scans/${encodeURIComponent(item.id)}/feedback`;

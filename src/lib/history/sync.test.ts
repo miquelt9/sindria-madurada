@@ -137,4 +137,31 @@ describe('sync gates', () => {
       vi.unstubAllEnvs();
     }
   });
+
+  it('drops a feedback entry that has no valid id', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://api.example.test');
+    try {
+      setShareConsent(true);
+      const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      localStorage.setItem(
+        SYNC_QUEUE_STORAGE_KEY,
+        JSON.stringify([
+          { kind: 'feedback', payload: { feedback: 'ripe' }, attempts: 0 },
+          { kind: 'feedback', id: 12, payload: { feedback: 'ripe' }, attempts: 0 },
+          { kind: 'feedback', id: '', payload: { feedback: 'ripe' }, attempts: 0 },
+          { kind: 'scan', payload: { id: 'melon-ok' }, attempts: 0 },
+        ]),
+      );
+
+      await flushSyncQueue();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]?.[0])).toBe('https://api.example.test/scans');
+      expect(JSON.parse(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY) ?? 'null')).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
