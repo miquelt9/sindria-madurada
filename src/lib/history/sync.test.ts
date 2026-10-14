@@ -153,7 +153,7 @@ describe('sync gates', () => {
     }
   });
 
-  it.fails('drops a corrupt queue entry instead of rejecting every later flush', async () => {
+  it('drops a corrupt queue entry instead of rejecting every later flush', async () => {
     vi.stubEnv('VITE_API_URL', 'https://api.example.test');
     try {
       setShareConsent(true);
@@ -173,6 +173,37 @@ describe('sync gates', () => {
       );
       await flushSyncQueue();
       expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY) ?? 'null')).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('drops a feedback entry that has no valid id', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://api.example.test');
+    try {
+      setShareConsent(true);
+      const seenUrls: string[] = [];
+      const fetchMock = vi.fn(async (url: string) => {
+        seenUrls.push(url);
+        return new Response(null, { status: 200 });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      localStorage.setItem(
+        SYNC_QUEUE_STORAGE_KEY,
+        JSON.stringify([
+          { kind: 'feedback', payload: { feedback: 'ripe' }, attempts: 0 },
+          { kind: 'feedback', id: 12, payload: { feedback: 'ripe' }, attempts: 0 },
+          { kind: 'feedback', id: '', payload: { feedback: 'ripe' }, attempts: 0 },
+          { kind: 'scan', payload: { id: 'melon-ok' }, attempts: 0 },
+        ]),
+      );
+
+      await flushSyncQueue();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(seenUrls).toEqual(['https://api.example.test/scans']);
       expect(JSON.parse(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY) ?? 'null')).toEqual([]);
     } finally {
       vi.unstubAllEnvs();
