@@ -9,6 +9,7 @@ import { KnockRecorderView } from './KnockRecorderView';
 
 type RecorderStub = {
   onKnockDetected?: (count: number) => void;
+  onWeakTap?: (reason: 'low_peak' | 'noisy') => void;
   onVolumeUpdate?: (volume: number) => void;
   onSpectrumUpdate?: (data: Uint8Array) => void;
   startListening: ReturnType<typeof vi.fn>;
@@ -28,6 +29,7 @@ vi.mock('../lib/audio/recorder', () => ({
     liveRms = 0;
     noiseFloor = 0.005;
     onKnockDetected?: (count: number) => void;
+    onWeakTap?: (reason: 'low_peak' | 'noisy') => void;
     onVolumeUpdate?: (volume: number) => void;
     onSpectrumUpdate?: (data: Uint8Array) => void;
     startListening = vi.fn(async () => {});
@@ -116,6 +118,47 @@ describe('Knock back control', () => {
     act(() => {
       recorder?.onKnockDetected?.(1);
     });
+    expect(onKnockComplete).not.toHaveBeenCalled();
+  });
+
+  it('releases the mic on a weak tap and does not produce a result', async () => {
+    const onWeakTap = vi.fn();
+    const onKnockComplete = vi.fn();
+    render(
+      <I18nProvider>
+        <KnockRecorderView autoStart onBack={() => {}} onKnockComplete={onKnockComplete} onWeakTap={onWeakTap} />
+      </I18nProvider>,
+    );
+
+    await screen.findByRole('button', { name: /Finish with/ });
+    const recorder = recorderHost.instances.at(-1);
+    expect(recorder?.startListening).toHaveBeenCalled();
+
+    act(() => {
+      recorder?.onWeakTap?.('low_peak');
+    });
+
+    expect(recorder?.stopAndAnalyze).toHaveBeenCalled();
+    expect(onWeakTap).toHaveBeenCalledWith('low_peak');
+    expect(onKnockComplete).not.toHaveBeenCalled();
+  });
+
+  it('treats a finish with no onset as a retry', async () => {
+    const onWeakTap = vi.fn();
+    const onKnockComplete = vi.fn();
+    render(
+      <I18nProvider>
+        <KnockRecorderView onBack={() => {}} onKnockComplete={onKnockComplete} onWeakTap={onWeakTap} />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: en.knockStartBtn }));
+    const finish = await screen.findByRole('button', { name: /Finish with/ });
+    const recorder = recorderHost.instances.at(-1);
+    recorder?.stopAndAnalyze.mockReturnValueOnce({ knockCount: 0 });
+    fireEvent.click(finish);
+
+    expect(onWeakTap).toHaveBeenCalledWith('noisy');
     expect(onKnockComplete).not.toHaveBeenCalled();
   });
 });

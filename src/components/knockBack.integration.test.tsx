@@ -7,10 +7,12 @@ import { en } from '../i18n/en';
 import { ThemeProvider } from './ui/ThemeProvider';
 import { App } from '../App';
 import { backFromKnock } from '../lib/scan/backFromKnock';
+import { noteNewPhoto } from '../lib/scan/weakTapFlow';
 
 const recorderHost = vi.hoisted(() => ({
   instances: [] as Array<{
     onKnockDetected?: (count: number) => void;
+    onWeakTap?: (reason: 'low_peak' | 'noisy') => void;
     onVolumeUpdate?: (volume: number) => void;
     onSpectrumUpdate?: (data: Uint8Array) => void;
     startListening: ReturnType<typeof vi.fn>;
@@ -62,6 +64,7 @@ vi.mock('../lib/audio/recorder', () => ({
     liveRms = 0;
     noiseFloor = 0.005;
     onKnockDetected?: (count: number) => void;
+    onWeakTap?: (reason: 'low_peak' | 'noisy') => void;
     onVolumeUpdate?: (volume: number) => void;
     onSpectrumUpdate?: (data: Uint8Array) => void;
     startListening = vi.fn(async () => {});
@@ -84,6 +87,18 @@ vi.mock('../lib/audio/recorder', () => ({
     }
   },
 }));
+
+vi.mock('../lib/scan/weakTapFlow', async () => {
+  const actual = await vi.importActual<typeof import('../lib/scan/weakTapFlow')>(
+    '../lib/scan/weakTapFlow'
+  );
+  return {
+    ...actual,
+    noteNewPhoto: vi.fn((state: Parameters<typeof actual.noteNewPhoto>[0]) =>
+      actual.noteNewPhoto(state)
+    ),
+  };
+});
 
 vi.mock('../lib/scan/backFromKnock', async () => {
   const actual = await vi.importActual<typeof import('../lib/scan/backFromKnock')>(
@@ -216,6 +231,7 @@ beforeEach(() => {
   idb.openDB.mockClear();
   vision.analyzeWatermelonImage.mockClear();
   vi.mocked(backFromKnock).mockClear();
+  vi.mocked(noteNewPhoto).mockClear();
   localStorage.clear();
   localStorage.setItem('sindria.lang', 'en');
   installDomStubs();
@@ -308,6 +324,62 @@ describe('Back from Knock to Photo', () => {
     expect(stepStatus('knock')).toBe('current');
     expect(idb.put).not.toHaveBeenCalled();
     expect(recorder?.stopAndAnalyze).toHaveBeenCalled();
+  });
+
+  it('resets the weak-tap counter on back, retake, and a new photo', async () => {
+    renderApp();
+    await capturePhoto();
+    await confirmToKnock();
+
+    const markWeak = async () => {
+      const start = screen.queryByRole('button', { name: en.knockStartBtn });
+      if (start) fireEvent.click(start);
+      await screen.findByRole('button', { name: /Finish with/ });
+      const recorder = recorderHost.instances.at(-1);
+      expect(recorder?.onWeakTap).toBeTypeOf('function');
+      act(() => {
+        recorder?.onWeakTap?.('low_peak');
+      });
+      expect(await screen.findByRole('heading', { name: en.weakTapTitle })).toBeTruthy();
+    };
+
+    await markWeak();
+    expect(screen.getByText(en.weakTapSubline)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: en.weakTapRestart })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: en.weakTapRetry }));
+    await markWeak();
+    fireEvent.click(screen.getByRole('button', { name: en.weakTapRetry }));
+    await markWeak();
+    expect(screen.getByText(en.weakTapSublineCalm)).toBeTruthy();
+    expect(screen.getByRole('button', { name: en.weakTapRestart })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: en.weakTapRetry }));
+    await screen.findByRole('button', { name: en.back });
+
+    const beforeBack = vi.mocked(noteNewPhoto).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: en.back }));
+    await screen.findByRole('button', { name: en.continueKnocks });
+    expect(vi.mocked(noteNewPhoto).mock.calls.length).toBeGreaterThan(beforeBack);
+    expect(vi.mocked(noteNewPhoto).mock.calls[beforeBack][0].weakTapCount).toBe(3);
+
+    const beforeRetake = vi.mocked(noteNewPhoto).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: en.retake }));
+    expect(vi.mocked(noteNewPhoto).mock.calls.length).toBeGreaterThan(beforeRetake);
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([new Uint8Array([4, 5, 6])], 'next.jpg', { type: 'image/jpeg' });
+    const beforeChoose = vi.mocked(noteNewPhoto).mock.calls.length;
+    fireEvent.change(input, { target: { files: [file] } });
+    await screen.findByRole('button', { name: en.continueKnocks });
+    expect(vi.mocked(noteNewPhoto).mock.calls.length).toBeGreaterThan(beforeChoose);
+
+    fireEvent.click(screen.getByRole('button', { name: en.continueKnocks }));
+    await screen.findByRole('heading', { name: en.knockTitle });
+    await markWeak();
+    expect(screen.getByText(en.weakTapSubline)).toBeTruthy();
+    expect(screen.queryByText(en.weakTapSublineCalm)).toBeNull();
+    expect(screen.queryByRole('button', { name: en.weakTapRestart })).toBeNull();
   });
 
   it('still skips knock from the restored photo without an earlier history row', async () => {

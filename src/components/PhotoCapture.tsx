@@ -40,6 +40,8 @@ export interface PhotoCaptureResult {
 interface PhotoCaptureProps {
   onPhotoCropped: (result: PhotoCaptureResult) => void;
   onBack?: () => void;
+  /** Retake or a newly chosen rind photo. Clears the weak-tap counter. */
+  onNewPhoto?: () => void;
   /** Preserved capture when returning from Knock. Omit on a fresh photo step. */
   initialFraming?: PhotoFraming | null;
 }
@@ -52,6 +54,7 @@ const SIZE_STORAGE_KEY = 'sindria.size';
 export const PhotoCapture: React.FC<PhotoCaptureProps> = ({
   onPhotoCropped,
   onBack,
+  onNewPhoto,
   initialFraming = null,
 }) => {
   const { t } = useI18n();
@@ -222,6 +225,7 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({
 
   const processCapturedImage = async (dataUrl: string, forTarget: CaptureTarget) => {
     if (forTarget === 'rind') {
+      onNewPhoto?.();
       setCapturedRindImage(dataUrl);
       stopCameraStream();
 
@@ -402,6 +406,7 @@ export const PhotoCapture: React.FC<PhotoCaptureProps> = ({
   };
 
   const resetAllPhotos = () => {
+    onNewPhoto?.();
     setCapturedRindImage(null);
     setCapturedBellyImage(null);
     setGroundSpotPoint(undefined);
