@@ -1,5 +1,5 @@
 import { aggregateKnockFeatures } from './features';
-import { FRAME_SIZE, KnockDetector, MAX_KNOCKS } from './onset';
+import { FRAME_SIZE, KnockDetector, MAX_KNOCKS, WeakTapReason } from './onset';
 import { AudioFeatures } from '../types';
 
 type WakeLockSentinelLike = {
@@ -30,8 +30,10 @@ export class KnockRecorder {
   private _noiseFloor = 0.005;
 
   public onKnockDetected?: (knockNumber: number, maxKnocks: number) => void;
+  public onWeakTap?: (reason: WeakTapReason) => void;
   public onVolumeUpdate?: (volume: number) => void;
   public onSpectrumUpdate?: (frequencyData: Uint8Array) => void;
+  private weakSent = false;
 
   get liveRms(): number {
     return this.detector?.liveRms ?? this._liveRms;
@@ -61,6 +63,7 @@ export class KnockRecorder {
 
     const sampleRate = this.audioContext.sampleRate;
     this.detector = new KnockDetector(sampleRate);
+    this.weakSent = false;
     this._liveRms = 0;
     this._noiseFloor = this.detector.noiseFloor;
     this.useAnalyserPcm = true;
@@ -85,6 +88,10 @@ export class KnockRecorder {
   captureManualKnock(): boolean {
     if (!this.isListening || !this.detector) return false;
     const captured = this.detector.captureManualKnock();
+    if (this.detector.lastRejection) {
+      this.emitWeak(this.detector.lastRejection);
+      return false;
+    }
     if (captured) {
       this.emitKnock();
     }
@@ -152,9 +159,19 @@ export class KnockRecorder {
     const detected = this.detector.pushFrame(frame);
     this._liveRms = this.detector.liveRms;
     this._noiseFloor = this.detector.noiseFloor;
+    if (this.detector.lastRejection) {
+      this.emitWeak(this.detector.lastRejection);
+      return;
+    }
     if (detected) {
       this.emitKnock();
     }
+  }
+
+  private emitWeak(reason: WeakTapReason): void {
+    if (this.weakSent) return;
+    this.weakSent = true;
+    this.onWeakTap?.(reason);
   }
 
   private emitKnock(): void {

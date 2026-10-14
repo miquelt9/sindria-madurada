@@ -83,6 +83,11 @@ export const ca: Translations = {
   knockTapManual: 'Toca quan piquis',
   knockFinishWithCount: 'Finalitzar amb {count} cop{plural}',
   knockSkip: 'Ometre test acústic (només anàlisi visual)',
+  weakTapTitle: "No t'he sentit bé",
+  weakTapSubline: 'Dona-li un cop més ferm, a prop del mòbil',
+  weakTapSublineCalm: 'Prova en un lloc més tranquil i pica a prop del centre',
+  weakTapRetry: 'Torna-ho a provar',
+  weakTapRestart: 'Comença de nou',
 
   // Result & Verdict
   verdictRipe: 'Probablement madura',

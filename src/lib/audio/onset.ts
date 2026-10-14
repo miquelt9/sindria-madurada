@@ -11,6 +11,41 @@ export const HOP_SIZE = 128;
 export const MAX_KNOCKS = 3;
 export const WARMUP_FRAMES = 4;
 
+/** Float PCM reaches full scale at 1. Not a ripeness threshold. */
+export const PCM_FULL_SCALE = 1;
+
+export type WeakTapReason = 'low_peak' | 'noisy';
+
+/**
+ * One captured tap. A weak or noisy window is a retry and is not a score.
+ * Uses the onset thresholds already in this file; they are not retuned here.
+ */
+function frameIsClipped(frame: Float32Array): boolean {
+  for (let i = 0; i < frame.length; i++) {
+    if (Math.abs(frame[i]) >= PCM_FULL_SCALE) return true;
+  }
+  return false;
+}
+
+export function classifyTapPcm(
+  pcm: Float32Array,
+  noiseFloor = 0.005,
+): { ok: true } | { ok: false; reason: WeakTapReason } {
+  if (pcm.length === 0) return { ok: false, reason: 'noisy' };
+
+  for (let i = 0; i < pcm.length; i++) {
+    if (Math.abs(pcm[i]) >= PCM_FULL_SCALE) return { ok: false, reason: 'noisy' };
+  }
+
+  const stats = analyzeFrame(pcm);
+  const threshold = Math.max(noiseFloor * NOISE_FLOOR_MULTIPLIER, MIN_RMS_THRESHOLD);
+  if (stats.peakHopRms <= threshold) return { ok: false, reason: 'low_peak' };
+  if (!(stats.peakHopRms > stats.meanHopRms * SPIKE_RATIO)) {
+    return { ok: false, reason: 'noisy' };
+  }
+  return { ok: true };
+}
+
 const RING_DURATION_MS = 500;
 
 export interface KnockDetectionResult {
@@ -57,6 +92,9 @@ export class KnockDetector {
     return this.knockSpectra;
   }
 
+  /** Set when the latest tap failed an existing level, clip, or onset check. */
+  lastRejection: WeakTapReason | null = null;
+
   reset(): void {
     this.ring.fill(0);
     this.writeIndex = 0;
@@ -67,6 +105,7 @@ export class KnockDetector {
     this.knockSpectra.length = 0;
     this.liveRms = 0;
     this.noiseFloor = 0.005;
+    this.lastRejection = null;
   }
 
   /**
@@ -74,6 +113,7 @@ export class KnockDetector {
    */
   pushFrame(frame: Float32Array): boolean {
     if (frame.length === 0) return false;
+    this.lastRejection = null;
     this.writeToRing(frame);
 
     const stats = analyzeFrame(frame);
@@ -97,27 +137,46 @@ export class KnockDetector {
     const debounced = nowMs - this.lastKnockAtMs >= KNOCK_DEBOUNCE_MS;
 
     if (isLoud && isSpike && debounced) {
+      if (frameIsClipped(frame)) {
+        this.lastKnockAtMs = nowMs;
+        this.lastRejection = 'noisy';
+        return false;
+      }
       const spectrum = this.captureKnockSpectrum();
       if (spectrum) {
         this.lastKnockAtMs = nowMs;
         this.knockSpectra.push(spectrum);
         return true;
       }
+    } else if (isSpike && debounced && !isLoud) {
+      this.lastKnockAtMs = nowMs;
+      this.lastRejection = 'low_peak';
+      return false;
     }
 
     this.updateNoiseFloor(stats.frameRms, isLoud);
     return false;
   }
 
-  /** Grocery fallback: treat the current ring window as a knock (skips RMS gate). */
+  /** Grocery fallback: the current window, or a retry when that window fails. */
   captureManualKnock(): boolean {
     if (this.knockSpectra.length >= this.maxKnocks) return false;
     const nowMs = this.currentTimeMs();
     if (nowMs - this.lastKnockAtMs < KNOCK_DEBOUNCE_MS) return false;
-    const spectrum = this.captureKnockSpectrum();
-    if (!spectrum) return false;
+    this.lastRejection = null;
+    const captured = this.readKnockPcm();
+    if (!captured) {
+      this.lastRejection = 'noisy';
+      return false;
+    }
+    const quality = classifyTapPcm(captured, this.noiseFloor);
+    if (!quality.ok) {
+      this.lastKnockAtMs = nowMs;
+      this.lastRejection = quality.reason;
+      return false;
+    }
     this.lastKnockAtMs = nowMs;
-    this.knockSpectra.push(spectrum);
+    this.knockSpectra.push(fftMagnitudes(applyHann(captured)));
     return true;
   }
 
@@ -148,13 +207,17 @@ export class KnockDetector {
     this.totalSamples += frame.length;
   }
 
-  private captureKnockSpectrum(): Float32Array | null {
+  private readKnockPcm(): Float32Array | null {
     const windowSamples = Math.round((KNOCK_WINDOW_MS / 1000) * this.sampleRate);
     const prerollSamples = Math.round((KNOCK_PREROLL_MS / 1000) * this.sampleRate);
     const minSamples = Math.min(windowSamples, Math.max(prerollSamples + 256, FRAME_SIZE / 2));
     if (this.samplesWritten < minSamples) return null;
+    return this.readLatest(Math.min(windowSamples, this.samplesWritten));
+  }
 
-    const captured = this.readLatest(Math.min(windowSamples, this.samplesWritten));
+  private captureKnockSpectrum(): Float32Array | null {
+    const captured = this.readKnockPcm();
+    if (!captured) return null;
     return fftMagnitudes(applyHann(captured));
   }
 

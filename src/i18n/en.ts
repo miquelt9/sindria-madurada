@@ -83,6 +83,11 @@ export const en: Translations = {
   knockTapManual: 'Tap when knocking',
   knockFinishWithCount: 'Finish with {count} knock{plural}',
   knockSkip: 'Skip acoustic test (visual analysis only)',
+  weakTapTitle: "I didn't hear that well",
+  weakTapSubline: 'Give it a firmer knock, close to the phone',
+  weakTapSublineCalm: 'Try a quieter place and knock near the centre',
+  weakTapRetry: 'Try again',
+  weakTapRestart: 'Start over',
 
   // Result & Verdict
   verdictRipe: 'Likely ripe',

@@ -77,6 +77,11 @@ export interface Translations {
   knockTapManual: string;
   knockFinishWithCount: string;
   knockSkip: string;
+  weakTapTitle: string;
+  weakTapSubline: string;
+  weakTapSublineCalm: string;
+  weakTapRetry: string;
+  weakTapRestart: string;
 
   // Result & Verdict
   verdictRipe: string;

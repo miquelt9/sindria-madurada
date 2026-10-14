@@ -173,13 +173,35 @@ describe('KnockDetector', () => {
   });
 
   it('captures one manual knock after a frame of audio and then honors the debounce', () => {
+    const silent = new KnockDetector(SAMPLE_RATE);
+    expect(silent.captureManualKnock()).toBe(false);
+    expect(silent.lastRejection).toBe('noisy');
+
+    silent.pushFrame(new Float32Array(FRAME_SIZE));
+    expect(silent.captureManualKnock()).toBe(false);
+    expect(silent.lastRejection).toBe('low_peak');
+    expect(silent.knockCount).toBe(0);
+
     const detector = new KnockDetector(SAMPLE_RATE);
-    expect(detector.captureManualKnock()).toBe(false);
-    detector.pushFrame(new Float32Array(FRAME_SIZE));
+    detector.pushFrame(spikeFrame());
     expect(detector.captureManualKnock()).toBe(true);
+    expect(detector.lastRejection).toBeNull();
     expect(detector.captureManualKnock()).toBe(false);
     expect(detector.knockCount).toBe(1);
     expect(detector.spectra).toHaveLength(1);
+  });
+
+  it('does not store a quiet spike and marks it as a low peak', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    for (let i = 0; i < 4; i += 1) {
+      expect(detector.pushFrame(new Float32Array(FRAME_SIZE))).toBe(false);
+    }
+    const quiet = new Float32Array(FRAME_SIZE);
+    for (let i = 0; i < HOP_SIZE; i += 1) quiet[i] = 0.004;
+    expect(detector.pushFrame(quiet)).toBe(false);
+    expect(detector.lastRejection).toBe('low_peak');
+    expect(detector.knockCount).toBe(0);
+    expect(detector.spectra).toEqual([]);
   });
 
   it('reset clears knocks, the noise floor, and the live level', () => {
