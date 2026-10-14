@@ -52,6 +52,22 @@ export function noteGoodTap<T extends WeakTapState>(state: T): T {
   return { ...state, weakTapCount: 0 };
 }
 
+/**
+ * Back, retake, or a newly chosen photo clears the weak-tap counter.
+ * The photo draft itself is left to the caller.
+ */
+export function noteNewPhoto<T extends WeakTapState>(state: T): T {
+  if (state.weakTapCount === 0 && state.knockPhase === 'capture' && state.knockSession === 0) {
+    return state;
+  }
+  return {
+    ...state,
+    knockPhase: 'capture',
+    weakTapCount: 0,
+    knockSession: 0,
+  };
+}
+
 /** Start over. The capture is discarded and the counter is cleared. */
 export function restartScan<T extends WeakTapState>(state: T): T {
   return {

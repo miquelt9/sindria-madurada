@@ -10,7 +10,13 @@ import { analyzeWatermelonImage } from './lib/vision/analyzer';
 import { fuseRipenessSignals } from './lib/score/fusion';
 import { saveScanRecord, updateScanFeedback } from './lib/history/storage';
 import { backFromKnock } from './lib/scan/backFromKnock';
-import { noteGoodTap, recordWeakTap, restartScan, retryKnockCapture } from './lib/scan/weakTapFlow';
+import {
+  noteGoodTap,
+  noteNewPhoto,
+  recordWeakTap,
+  restartScan,
+  retryKnockCapture,
+} from './lib/scan/weakTapFlow';
 import {
   VisualFeatures,
   AudioFeatures,
@@ -209,7 +215,11 @@ export const App: React.FC = () => {
   const handleBackToPhoto = () => {
     if (stepRef.current !== 'knock') return;
     stepRef.current = 'photo';
-    setFlow((current) => backFromKnock(current));
+    setFlow((current) => noteNewPhoto(backFromKnock(current)));
+  };
+
+  const handleNewPhoto = () => {
+    setFlow((current) => noteNewPhoto(current));
   };
 
   const handleWeakTap = () => {
@@ -263,6 +273,7 @@ export const App: React.FC = () => {
         <PhotoCapture
           onPhotoCropped={handlePhotoCaptured}
           onBack={navigateHome}
+          onNewPhoto={handleNewPhoto}
           initialFraming={framing}
         />
       )}

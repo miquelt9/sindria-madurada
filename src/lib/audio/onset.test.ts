@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { FRAME_SIZE, HOP_SIZE, KnockDetector, analyzeFrame, detectKnocksInPcm } from './onset';
+import {
+  FRAME_SIZE,
+  HOP_SIZE,
+  KNOCK_DEBOUNCE_MS,
+  KNOCK_WINDOW_MS,
+  KnockDetector,
+  analyzeFrame,
+  detectKnocksInPcm,
+} from './onset';
 import { extractAbbaszadehFeatures } from './features';
 import { applyHann, fftMagnitudes } from './fft';
 
@@ -189,6 +197,38 @@ describe('KnockDetector', () => {
     expect(detector.captureManualKnock()).toBe(false);
     expect(detector.knockCount).toBe(1);
     expect(detector.spectra).toHaveLength(1);
+  });
+
+  it('skips a grocery press that lands after the knock window', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    for (let i = 0; i < 4; i += 1) {
+      expect(detector.pushFrame(new Float32Array(FRAME_SIZE))).toBe(false);
+    }
+    expect(detector.pushFrame(spikeFrame())).toBe(true);
+    expect(detector.knockCount).toBe(1);
+    expect(detector.lastRejection).toBeNull();
+    const kept = detector.spectra[0];
+
+    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
+    const frames = Math.ceil((KNOCK_DEBOUNCE_MS + 50) / frameMs);
+    const elapsed = frames * frameMs;
+    expect(elapsed).toBeGreaterThan(KNOCK_WINDOW_MS);
+    expect(elapsed).toBeGreaterThan(KNOCK_DEBOUNCE_MS);
+    for (let i = 0; i < frames; i += 1) {
+      expect(detector.pushFrame(new Float32Array(FRAME_SIZE))).toBe(false);
+    }
+    expect(detector.lastRejection).toBeNull();
+
+    expect(detector.captureManualKnock()).toBe(false);
+    expect(detector.lastRejection).toBeNull();
+    expect(detector.knockCount).toBe(1);
+    expect(detector.spectra).toHaveLength(1);
+    expect(detector.spectra[0]).toBe(kept);
+
+    expect(detector.pushFrame(spikeFrame())).toBe(true);
+    expect(detector.knockCount).toBe(2);
+    expect(detector.lastRejection).toBeNull();
+    expect(detector.spectra[0]).toBe(kept);
   });
 
   it('does not store a quiet spike and marks it as a low peak', () => {

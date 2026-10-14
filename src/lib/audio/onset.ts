@@ -158,11 +158,16 @@ export class KnockDetector {
     return false;
   }
 
-  /** Grocery fallback: the current window, or a retry when that window fails. */
+  /**
+   * Grocery fallback. A press more than one knock window after a counted
+   * knock is stale: ignore it, and do not reject knocks already stored.
+   */
   captureManualKnock(): boolean {
     if (this.knockSpectra.length >= this.maxKnocks) return false;
     const nowMs = this.currentTimeMs();
-    if (nowMs - this.lastKnockAtMs < KNOCK_DEBOUNCE_MS) return false;
+    const ageMs = nowMs - this.lastKnockAtMs;
+    if (this.knockSpectra.length > 0 && ageMs > KNOCK_WINDOW_MS) return false;
+    if (ageMs < KNOCK_DEBOUNCE_MS) return false;
     this.lastRejection = null;
     const captured = this.readKnockPcm();
     if (!captured) {

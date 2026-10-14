@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { backFromKnock } from './backFromKnock';
 import {
   noteGoodTap,
+  noteNewPhoto,
   recordWeakTap,
   restartScan,
   retryKnockCapture,
@@ -58,6 +60,38 @@ describe('weak tap counter', () => {
     expect(restarted.visualFeatures).toBeNull();
     expect(restarted.currentResult).toBeNull();
     expect(restarted.currentScanId).toBeNull();
+  });
+
+  it('resets when going back, retaking, or choosing a new photo', () => {
+    const counted = recordWeakTap(
+      recordWeakTap(recordWeakTap(draft({ knockPhase: 'retry', knockSession: 4 })))
+    );
+    expect(counted.weakTapCount).toBe(3);
+
+    const backed = noteNewPhoto(backFromKnock(counted));
+    expect(backed.step).toBe('photo');
+    expect(backed.weakTapCount).toBe(0);
+    expect(backed.knockPhase).toBe('capture');
+    expect(backed.knockSession).toBe(0);
+    expect(backed.croppedPhotoUrl).toBe(counted.croppedPhotoUrl);
+    expect(backed.visualFeatures).toBe(counted.visualFeatures);
+    expect(backed.framing).toBe(counted.framing);
+    expect(counted.weakTapCount).toBe(3);
+
+    const retaken = noteNewPhoto(
+      recordWeakTap(recordWeakTap({ ...backed, step: 'knock', knockPhase: 'retry', knockSession: 2 }))
+    );
+    expect(retaken.weakTapCount).toBe(0);
+    expect(retaken.knockPhase).toBe('capture');
+    expect(retaken.knockSession).toBe(0);
+    expect(retaken.croppedPhotoUrl).toBe(counted.croppedPhotoUrl);
+
+    const chosen = noteNewPhoto(recordWeakTap({ ...retaken, step: 'photo', knockSession: 1 }));
+    expect(chosen.weakTapCount).toBe(0);
+    expect(chosen.knockPhase).toBe('capture');
+    expect(chosen.knockSession).toBe(0);
+    expect(chosen.croppedPhotoUrl).toBe(counted.croppedPhotoUrl);
+    expect(noteNewPhoto(chosen)).toBe(chosen);
   });
 
   it('retry keeps the photo and opens a fresh knock session', () => {
