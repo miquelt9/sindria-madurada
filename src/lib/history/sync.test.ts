@@ -82,7 +82,7 @@ describe('sync gates', () => {
     expect(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY)).toBe('[{"kind":"scan"}]');
   });
 
-  it.fails('keeps a scan that is enqueued while a flush is in flight', async () => {
+  it('keeps a scan that is enqueued while a flush is in flight', async () => {
     vi.stubEnv('VITE_API_URL', 'https://api.example.test');
     try {
       setShareConsent(true);
@@ -107,6 +107,47 @@ describe('sync gates', () => {
         payload?: { id?: string };
       }>;
       expect(queued.map((item) => item.payload?.id)).toEqual(['melon-2']);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps a newer same-id scan when the sent original is trimmed mid-flush', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://api.example.test');
+    try {
+      setShareConsent(true);
+      const cap = 20;
+      const original = Array.from({ length: cap }, (_, index) => ({
+        kind: 'scan' as const,
+        payload: { id: index === 0 ? 'melon-dup' : `melon-${index}` },
+        attempts: 0,
+      }));
+      localStorage.setItem(SYNC_QUEUE_STORAGE_KEY, JSON.stringify(original));
+
+      let releaseFirst: (response: Response) => void = () => {};
+      let started = false;
+      const fetchMock = vi.fn(() => {
+        if (!started) {
+          started = true;
+          enqueueScanSync(scan('melon-dup'));
+          return new Promise<Response>((resolve) => {
+            releaseFirst = resolve;
+          });
+        }
+        return Promise.resolve(new Response(null, { status: 200 }));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const pending = flushSyncQueue();
+      releaseFirst(new Response(null, { status: 200 }));
+      await pending;
+
+      const queued = JSON.parse(localStorage.getItem(SYNC_QUEUE_STORAGE_KEY) ?? '[]') as Array<{
+        payload?: { id?: string; photoJpeg?: string };
+      }>;
+      expect(fetchMock).toHaveBeenCalledTimes(cap);
+      expect(queued.map((item) => item.payload?.id)).toEqual(['melon-dup']);
+      expect(queued[0]?.payload?.photoJpeg).toBe('data:image/jpeg;base64,melon-dup');
     } finally {
       vi.unstubAllEnvs();
     }

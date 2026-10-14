@@ -1,9 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   evaluatePredictions,
   validateWatermelonImage,
   ClassificationPrediction,
 } from './watermelonGate';
+
+vi.mock('@huggingface/transformers', () => ({
+  pipeline: () => Promise.reject(new Error('classifier unavailable')),
+  env: {},
+}));
 
 describe('Watermelon Gate - evaluatePredictions', () => {
   it('accepts when watermelon is top prediction with high confidence', () => {
@@ -139,12 +144,19 @@ describe('Watermelon Gate - evaluatePredictions', () => {
 
 describe('Watermelon Gate - Fail Open / Offline Fallback', () => {
   it('fails open when classifier loading fails', async () => {
-    // Calling with an invalid dummy object to trigger error handling or uninitialized pipeline in test env
-    const result = await validateWatermelonImage('invalid-image-source');
-    // It should either evaluate or safely fail open without throwing
-    expect(result).toHaveProperty('passed');
-    if (result.couldNotVerify) {
-      expect(result.passed).toBe(true);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const result = await validateWatermelonImage('invalid-image-source');
+      expect(result).toEqual({
+        passed: true,
+        confidence: 50,
+        couldNotVerify: true,
+        error: 'classifier unavailable',
+      });
+      const contactedHub = fetchSpy.mock.calls.some((call) => String(call[0]).includes('huggingface.co'));
+      expect(contactedHub).toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
     }
   });
 });
