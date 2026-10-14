@@ -122,8 +122,17 @@ describe('analyzeFrame', () => {
     expect(stats.meanHopRms).toBeCloseTo(Math.sqrt(0.5) / 2);
   });
 
-  // A hop of 0 never advances `i += hop`, so a live assertion would hang the runner.
-  it.todo('rejects a zero hop instead of looping forever');
+  it('rejects a zero hop instead of looping forever', () => {
+    const frame = new Float32Array([0, 0, 0.6, 0.8]);
+    expect(() => analyzeFrame(frame, 0)).toThrow(RangeError);
+    expect(() => analyzeFrame(frame, -1)).toThrow(RangeError);
+  });
+
+  it('rejects a hop that is not a whole number', () => {
+    const frame = new Float32Array([0, 0, 0.6, 0.8]);
+    expect(() => analyzeFrame(frame, 1.5)).toThrow(RangeError);
+    expect(() => analyzeFrame(frame, Number.NaN)).toThrow(RangeError);
+  });
 });
 
 describe('KnockDetector', () => {
