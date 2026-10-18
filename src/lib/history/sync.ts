@@ -178,10 +178,23 @@ function dropClientError(status: number): boolean {
 }
 
 async function sendItem(item: QueueItem): Promise<'ok' | 'drop' | 'retry'> {
-  const base = getApiUrl();
-  const url =
-    item.kind === 'scan' ? `${base}/scans` : `${base}/scans/${encodeURIComponent(item.id)}/feedback`;
-  const method = item.kind === 'scan' ? 'POST' : 'PATCH';
+  let url: string;
+  let method: string;
+  try {
+    if (!item || (item.kind !== 'scan' && item.kind !== 'feedback')) {
+      return 'drop';
+    }
+    if (item.kind === 'feedback' && (typeof item.id !== 'string' || item.id.length === 0)) {
+      return 'drop';
+    }
+    const base = getApiUrl();
+    url =
+      item.kind === 'scan' ? `${base}/scans` : `${base}/scans/${encodeURIComponent(item.id)}/feedback`;
+    method = item.kind === 'scan' ? 'POST' : 'PATCH';
+  } catch {
+    return 'drop';
+  }
+
   try {
     const response = await fetch(url, {
       method,
