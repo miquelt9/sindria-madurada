@@ -1,14 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   FRAME_SIZE,
   HOP_SIZE,
   KNOCK_DEBOUNCE_MS,
   KNOCK_WINDOW_MS,
   KnockDetector,
-  WARMUP_FRAMES,
+  MANUAL_PRESS_SETTLE_MS,
   analyzeFrame,
   detectKnocksInPcm,
 } from './onset';
+import { KnockRecorder } from './recorder';
 import { extractAbbaszadehFeatures } from './features';
 import { applyHann, fftMagnitudes } from './fft';
 
@@ -433,72 +434,167 @@ describe('KnockDetector', () => {
     expect(detector.captureManualKnock(detector.clockSamples)).toBe(false);
   });
 
-  it('counts two presses after an auto knock that crosses a block boundary', () => {
-    const detector = new KnockDetector(SAMPLE_RATE);
-    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
-    const silence = () => new Float32Array(FRAME_SIZE);
-    for (let i = 0; i < WARMUP_FRAMES; i += 1) {
-      expect(detector.pushFrame(silence())).toBe(false);
-    }
+});
 
-    const overlap = 256;
-    const head = silence();
-    const tail = silence();
-    for (let i = 0; i < overlap; i += 1) {
-      head[FRAME_SIZE - overlap + i] = 0.25;
-      tail[i] = 0.25;
-    }
-    expect(detector.pushFrame(head)).toBe(true);
-    expect(detector.pushFrame(tail)).toBe(false);
-    expect(detector.knockCount).toBe(1);
-    expect(detector.lastRejection).toBeNull();
+/**
+ * Shop noise with one loud knock the detector counts on its own, then two
+ * quieter knocks that stay under the live spike check. The presses are the
+ * only way those two get stored. Nothing between the first knock and a press
+ * is a spike inside that press's debounce, so an uncounted tail cannot refresh
+ * the stale stamp on the way in.
+ */
+describe('a grocery press after an uncounted tail', () => {
+  const NOISE_RMS = 0.03;
 
-    const addManualKnock = () => {
-      const before = detector.knockCount;
-      for (let i = 0; i < 5; i += 1) expect(detector.pushFrame(silence())).toBe(false);
-      expect(detector.pushFrame(spikeFrame())).toBe(false);
-      expect(detector.knockCount).toBe(before);
-      for (let i = 0; i < 3; i += 1) expect(detector.pushFrame(silence())).toBe(false);
-      const sinceSpike = 3 * frameMs;
-      expect(sinceSpike).toBeLessThanOrEqual(KNOCK_WINDOW_MS);
-      expect(detector.captureManualKnock(detector.clockSamples)).toBe(true);
-      expect(detector.lastRejection).toBeNull();
-      expect(detector.knockCount).toBe(before + 1);
-    };
-
-    addManualKnock();
-    addManualKnock();
-    expect(detector.knockCount).toBe(3);
-    expect(detector.spectra).toHaveLength(3);
+  beforeEach(() => {
+    vi.useFakeTimers();
   });
 
-  it('stores a press after a clipped bang that followed a counted knock', () => {
-    const detector = new KnockDetector(SAMPLE_RATE);
-    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
-    const silence = () => new Float32Array(FRAME_SIZE);
-    for (let i = 0; i < WARMUP_FRAMES; i += 1) {
-      expect(detector.pushFrame(silence())).toBe(false);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function mulberry32(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function msToSamples(ms: number): number {
+    return Math.round((ms / 1000) * SAMPLE_RATE);
+  }
+
+  function addBurst(pcm: Float32Array, start: number, durationS: number, rms: number): void {
+    const len = Math.floor(durationS * SAMPLE_RATE);
+    const burst = new Float32Array(len);
+    let sumSq = 0;
+    for (let i = 0; i < len; i += 1) {
+      const hann = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (len - 1)));
+      burst[i] = Math.sin((2 * Math.PI * 160 * i) / SAMPLE_RATE) * hann;
+      sumSq += burst[i] * burst[i];
     }
-    expect(detector.pushFrame(spikeFrame())).toBe(true);
+    const scale = rms / Math.sqrt(sumSq / len);
+    for (let i = 0; i < len; i += 1) {
+      const at = start + i;
+      if (at >= pcm.length) break;
+      pcm[at] += burst[i] * scale;
+    }
+  }
+
+  /** 0.03 RMS noise, one 0.3 RMS knock across a block edge, then two 0.03 RMS knocks. */
+  function shopTailSession(clippedBang: boolean): {
+    pcm: Float32Array;
+    tailEnd: number;
+    bangEnd: number | null;
+    presses: number[];
+  } {
+    const boundary = 16 * FRAME_SIZE;
+    const loudLen = Math.floor(0.03 * SAMPLE_RATE);
+    const knock2 = boundary + msToSamples(900);
+    const bangAt = clippedBang ? boundary + msToSamples(550) : 0;
+    const second = clippedBang ? bangAt + msToSamples(800) : knock2;
+    const third = second + msToSamples(900);
+    const pcm = new Float32Array(third + msToSamples(700));
+    const rand = mulberry32(1);
+    for (let i = 0; i < pcm.length; i += 1) {
+      pcm[i] = NOISE_RMS * (rand() * 2 - 1) * Math.sqrt(3);
+    }
+    addBurst(pcm, boundary - Math.floor(loudLen / 2), 0.03, 0.3);
+    addBurst(pcm, second, 0.02, NOISE_RMS);
+    addBurst(pcm, third, 0.02, NOISE_RMS);
+    if (clippedBang) {
+      for (let i = 0; i < HOP_SIZE * 2; i += 1) pcm[bangAt + i] = 0.45;
+      pcm[bangAt] = 1;
+    }
+    return {
+      pcm,
+      tailEnd: boundary + FRAME_SIZE,
+      bangEnd: clippedBang ? bangAt + FRAME_SIZE : null,
+      presses: [second - msToSamples(40), third - msToSamples(40)],
+    };
+  }
+
+  type RecorderInner = {
+    isListening: boolean;
+    detector: KnockDetector | null;
+    ingestFrame(frame: Float32Array): void;
+  };
+
+  function listeningRecorder(): { recorder: KnockRecorder; detector: KnockDetector } {
+    const recorder = new KnockRecorder();
+    const detector = new KnockDetector(SAMPLE_RATE);
+    const inner = recorder as unknown as RecorderInner;
+    inner.isListening = true;
+    inner.detector = detector;
+    return { recorder, detector };
+  }
+
+  function ingestThrough(
+    recorder: KnockRecorder,
+    pcm: Float32Array,
+    until: number,
+    from = 0,
+  ): number {
+    let offset = Math.floor(from / FRAME_SIZE) * FRAME_SIZE;
+    const end = Math.max(0, Math.floor(until / FRAME_SIZE) * FRAME_SIZE);
+    const inner = recorder as unknown as RecorderInner;
+    while (offset + FRAME_SIZE <= end && offset + FRAME_SIZE <= pcm.length) {
+      inner.ingestFrame(pcm.subarray(offset, offset + FRAME_SIZE));
+      offset += FRAME_SIZE;
+    }
+    return offset;
+  }
+
+  function pressQuietKnocks(clippedBang: boolean): void {
+    const { pcm, tailEnd, bangEnd, presses } = shopTailSession(clippedBang);
+    const { recorder, detector } = listeningRecorder();
+    const knocks: number[] = [];
+    recorder.onKnockDetected = (count) => knocks.push(count);
+
+    let offset = ingestThrough(recorder, pcm, tailEnd);
     expect(detector.knockCount).toBe(1);
-
-    const gap = Math.ceil((KNOCK_DEBOUNCE_MS + 20) / frameMs);
-    for (let i = 0; i < gap; i += 1) expect(detector.pushFrame(silence())).toBe(false);
-
-    const clipped = spikeFrame();
-    clipped[0] = 1;
-    expect(detector.pushFrame(clipped)).toBe(false);
     expect(detector.lastRejection).toBeNull();
-    expect(detector.knockCount).toBe(1);
 
-    for (let i = 0; i < 5; i += 1) expect(detector.pushFrame(silence())).toBe(false);
-    expect(detector.pushFrame(spikeFrame())).toBe(false);
-    expect(detector.knockCount).toBe(1);
-    for (let i = 0; i < 3; i += 1) expect(detector.pushFrame(silence())).toBe(false);
+    if (bangEnd !== null) {
+      offset = ingestThrough(recorder, pcm, bangEnd, offset);
+      expect(detector.knockCount).toBe(1);
+      expect(detector.lastRejection).toBeNull();
+    }
 
-    expect(detector.captureManualKnock(detector.clockSamples)).toBe(true);
-    expect(detector.lastRejection).toBeNull();
-    expect(detector.knockCount).toBe(2);
-    expect(detector.spectra).toHaveLength(2);
+    const settle = msToSamples(MANUAL_PRESS_SETTLE_MS);
+    for (const acoustic of presses) {
+      const before = detector.knockCount;
+      offset = ingestThrough(recorder, pcm, acoustic, offset);
+      expect(detector.knockCount).toBe(before);
+      const stamp = detector.clockSamples;
+      recorder.captureManualKnock();
+      const ready = stamp + settle;
+      const inner = recorder as unknown as RecorderInner;
+      while (detector.clockSamples < ready) {
+        expect(detector.knockCount).toBe(before);
+        expect(offset + FRAME_SIZE).toBeLessThanOrEqual(pcm.length);
+        inner.ingestFrame(pcm.subarray(offset, offset + FRAME_SIZE));
+        offset += FRAME_SIZE;
+      }
+      expect(detector.knockCount).toBe(before + 1);
+      expect(detector.lastRejection).toBeNull();
+    }
+
+    expect(detector.knockCount).toBe(3);
+    expect(knocks).toEqual([1, 2, 3]);
+    recorder.stopAndAnalyze();
+  }
+
+  it('counts two presses after an auto knock that crosses a block boundary', () => {
+    pressQuietKnocks(false);
+  });
+
+  it('stores two presses after a clipped bang that followed that knock', () => {
+    pressQuietKnocks(true);
   });
 });
