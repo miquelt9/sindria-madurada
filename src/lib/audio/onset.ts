@@ -28,17 +28,24 @@ export const MANUAL_KNOCK_DECAY_BLOCKS = 2;
 export const MANUAL_KNOCK_SHAPE_RATIO = 1.25;
 
 /**
- * Wait after a grocery press before reading the ring.
+ * Audio that must arrive after a grocery-press stamp before the ring is read.
  * ScriptProcessor delivers audio in 2048-sample blocks, about 46 ms at
- * 44.1 kHz, and the browser graph often holds more than one block. The
- * press is stamped on the sample clock at the click. After this wait the
- * read starts about 200 ms before that stamp and runs through the newest
- * sample in the ring. The stamp can lag one 2048-sample block, so an end
- * at the stamp plus this wait stops before a knock that follows the press
- * and the decay fails the shape gate. Debounce and the stale-spike rule
- * use the stamp, not the later read. This is not a ripeness threshold.
+ * 44.1 kHz, and blocks often show up in a batch. A 120 ms wall clock can
+ * fire while the newest sample is only 93–140 ms past the stamp, which cuts
+ * off the decay of a knock that follows the press. The read waits until the
+ * audio clock itself has reached the stamp plus this span. The window still
+ * starts one knock window before the stamp and runs through the newest
+ * sample. Debounce and the stale-spike rule use the stamp, not the read.
+ * This is not a ripeness threshold.
  */
 export const MANUAL_PRESS_SETTLE_MS = 120;
+
+/**
+ * Wall-clock cap for a grocery press whose audio never catches up.
+ * Past this, the read uses whatever is already in the ring. Not a ripeness
+ * threshold, and not the 400 ms knock debounce.
+ */
+export const MANUAL_PRESS_WALL_CAP_MS = 400;
 
 /** Float PCM reaches full scale at 1. Not a ripeness threshold. */
 export const PCM_FULL_SCALE = 1;
@@ -265,8 +272,9 @@ export class KnockDetector {
    * not a second knock. A press is stale only against the last auto-detected
    * spike that was not stored, once that sound is older than one knock window.
    * Debounce and that stale rule use the press stamp, not the later read.
-   * Pass the sample-clock stamp from the click. After the capture block has
-   * had time to arrive, the read starts KNOCK_WINDOW_MS before that stamp
+   * Pass the sample-clock stamp from the click. The caller waits until the
+   * audio clock reaches that stamp plus MANUAL_PRESS_SETTLE_MS (or the wall
+   * cap) and then reads. The read starts KNOCK_WINDOW_MS before the stamp
    * and ends at the newest sample in the ring. The stored spectrum is the
    * knock-shaped peak inside that span. Without a stamp, the read is the
    * latest knock window at the current clock.

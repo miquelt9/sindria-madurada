@@ -1,11 +1,21 @@
 import { aggregateKnockFeatures } from './features';
-import { FRAME_SIZE, KnockDetector, MANUAL_PRESS_SETTLE_MS, MAX_KNOCKS, WeakTapReason } from './onset';
+import {
+  FRAME_SIZE,
+  KnockDetector,
+  MANUAL_PRESS_SETTLE_MS,
+  MANUAL_PRESS_WALL_CAP_MS,
+  MAX_KNOCKS,
+  WeakTapReason,
+} from './onset';
 import { AudioFeatures } from '../types';
 
 type WakeLockSentinelLike = {
   released: boolean;
   release: () => Promise<void>;
 };
+
+/** How often a pending press checks the audio clock between capture blocks. */
+const MANUAL_PRESS_POLL_MS = 20;
 
 const STRICT_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: false,
@@ -34,8 +44,13 @@ export class KnockRecorder {
   public onVolumeUpdate?: (volume: number) => void;
   public onSpectrumUpdate?: (frequencyData: Uint8Array) => void;
   private weakSent = false;
-  /** A grocery press is waiting for the capture buffer to catch up. */
-  private manualPressTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * A grocery press is waiting until the audio clock reaches the stamp
+   * plus MANUAL_PRESS_SETTLE_MS, or until the wall cap.
+   */
+  private pendingManual: { pressAtSample: number; readyAtSample: number } | null = null;
+  private manualPressPoll: ReturnType<typeof setInterval> | null = null;
+  private manualPressCap: ReturnType<typeof setTimeout> | null = null;
 
   get liveRms(): number {
     return this.detector?.liveRms ?? this._liveRms;
@@ -86,36 +101,64 @@ export class KnockRecorder {
     this.monitorLoop();
   }
 
-  /** True while a grocery press is waiting for the capture buffer. */
+  /** True while a grocery press is waiting for the audio clock. */
   get manualPressPending(): boolean {
-    return this.manualPressTimer !== null;
+    return this.pendingManual !== null;
   }
 
   /**
    * Grocery press. The click is stamped on the sample clock immediately.
-   * The shape check runs after MANUAL_PRESS_SETTLE_MS. The window starts
-   * about 200 ms before that stamp and ends at the newest sample in the
-   * ring, so a stamp that lags one block still covers the knock decay.
-   * A second press while one is waiting is ignored, so the timer is not
-   * pushed later. Returns false until that read stores a knock; the stored
-   * knock is reported through onKnockDetected.
+   * The shape check runs once that clock is at least MANUAL_PRESS_SETTLE_MS
+   * past the stamp, which is when a knock just after the press has its
+   * decay in the ring. Each capture block checks, and a short poll does
+   * too. If the audio has not caught up by MANUAL_PRESS_WALL_CAP_MS, the
+   * read uses whatever is already there. The window starts about 200 ms
+   * before the stamp and ends at the newest sample. A second press while
+   * one is waiting is ignored. Returns false until that read stores a
+   * knock; the stored knock is reported through onKnockDetected.
    */
   captureManualKnock(): boolean {
     if (!this.isListening || !this.detector) return false;
-    if (this.manualPressTimer !== null) return false;
+    if (this.pendingManual !== null) return false;
     const pressAtSample = this.detector.clockSamples;
-    this.manualPressTimer = setTimeout(() => {
-      this.manualPressTimer = null;
-      this.finishManualKnock(pressAtSample);
-    }, MANUAL_PRESS_SETTLE_MS);
+    const settleSamples = Math.round((MANUAL_PRESS_SETTLE_MS / 1000) * this.detector.sampleRate);
+    this.pendingManual = {
+      pressAtSample,
+      readyAtSample: pressAtSample + settleSamples,
+    };
+    this.manualPressPoll = setInterval(() => {
+      this.maybeFinishManualPress(false);
+    }, MANUAL_PRESS_POLL_MS);
+    this.manualPressCap = setTimeout(() => {
+      this.maybeFinishManualPress(true);
+    }, MANUAL_PRESS_WALL_CAP_MS);
     return false;
   }
 
   /** Drop a press that has not been read yet. Back, finish, and unmount do this. */
   cancelPendingManualKnock(): void {
-    if (this.manualPressTimer === null) return;
-    clearTimeout(this.manualPressTimer);
-    this.manualPressTimer = null;
+    this.pendingManual = null;
+    this.clearManualPressWait();
+  }
+
+  private clearManualPressWait(): void {
+    if (this.manualPressPoll !== null) {
+      clearInterval(this.manualPressPoll);
+      this.manualPressPoll = null;
+    }
+    if (this.manualPressCap !== null) {
+      clearTimeout(this.manualPressCap);
+      this.manualPressCap = null;
+    }
+  }
+
+  /** Read once the audio clock has reached the stamp, or when `force` hits the wall cap. */
+  private maybeFinishManualPress(force: boolean): void {
+    if (!this.pendingManual || !this.isListening || !this.detector) return;
+    if (!force && this.detector.clockSamples < this.pendingManual.readyAtSample) return;
+    const pressAtSample = this.pendingManual.pressAtSample;
+    this.cancelPendingManualKnock();
+    this.finishManualKnock(pressAtSample);
   }
 
   private finishManualKnock(pressAtSample: number): void {
@@ -199,6 +242,7 @@ export class KnockRecorder {
     if (detected) {
       this.emitKnock();
     }
+    this.maybeFinishManualPress(false);
   }
 
   private emitWeak(reason: WeakTapReason): void {

@@ -4,6 +4,7 @@ import {
   HOP_SIZE,
   KnockDetector,
   MANUAL_PRESS_SETTLE_MS,
+  MANUAL_PRESS_WALL_CAP_MS,
   WARMUP_FRAMES,
 } from './onset';
 import { KnockRecorder } from './recorder';
@@ -12,16 +13,15 @@ const SAMPLE_RATE = 44100;
 const NOISE_RMS = 0.03;
 
 /**
- * The click is stamped on the sample clock. The read waits
- * MANUAL_PRESS_SETTLE_MS (120), then starts about 200 ms before that stamp
- * and runs through the newest sample in the ring. A press 40 ms before the
- * knock is stored. A press about 50 ms before the knock is stored when the
- * stamp lags one block: the knock decay is already in the ring, past
- * stamp + settle. A press 180 ms before the knock is not: the knock falls
- * after the audio that has arrived.
- * A second press while the wait is running is ignored. It does not push the timer.
- * If the open block flushes an auto-counted knock during the wait, debounce
- * uses the earlier stamp and does not count a second knock.
+ * The click is stamped on the sample clock. The read waits until that clock
+ * is MANUAL_PRESS_SETTLE_MS (120) past the stamp, not until 120 ms of wall
+ * time. A batch that is still held back leaves the press pending. Once the
+ * batch brings the decay in, the press is stored. A press 180 ms before the
+ * knock still misses it: the knock is after stamp + 120 ms of audio.
+ * The wall cap (400 ms) reads whatever has arrived. A second press while
+ * the wait is running is ignored. If the open block flushes an auto-counted
+ * knock during the wait, debounce uses the earlier stamp and does not count
+ * a second knock.
  */
 
 function mulberry32(seed: number): () => number {
@@ -78,6 +78,22 @@ type RecorderInner = {
   ingestFrame(frame: Float32Array): void;
 };
 
+/** Push 2048-sample blocks through the recorder until the audio clock reaches `ready`. */
+function releaseUntilReady(
+  recorder: KnockRecorder,
+  detector: KnockDetector,
+  pcm: Float32Array,
+  from: number,
+  ready: number,
+): void {
+  let offset = Math.floor(from / FRAME_SIZE) * FRAME_SIZE;
+  const inner = recorder as unknown as RecorderInner;
+  while (detector.clockSamples < ready && offset + FRAME_SIZE <= pcm.length) {
+    inner.ingestFrame(pcm.subarray(offset, offset + FRAME_SIZE));
+    offset += FRAME_SIZE;
+  }
+}
+
 function listeningRecorder(): { recorder: KnockRecorder; detector: KnockDetector } {
   const recorder = new KnockRecorder();
   const detector = new KnockDetector(SAMPLE_RATE);
@@ -98,6 +114,7 @@ describe('grocery press waits for the capture buffer', () => {
 
   it('stores a knock pressed 40 ms later exactly once, after the block arrives', () => {
     expect(MANUAL_PRESS_SETTLE_MS).toBe(120);
+    expect(MANUAL_PRESS_WALL_CAP_MS).toBe(400);
 
     const { pcm, knockAt } = frameAlignedKnock(1);
     const pressAt = knockAt + msToSamples(40);
@@ -114,7 +131,8 @@ describe('grocery press waits for the capture buffer', () => {
     recorder.onKnockDetected = (count) => knocks.push(count);
     recorder.onWeakTap = (reason) => weaks.push(reason);
 
-    deliverThrough(detector, pcm, pressAt);
+    const offset = deliverThrough(detector, pcm, pressAt);
+    const stamp = detector.clockSamples;
     expect(recorder.captureManualKnock()).toBe(false);
     expect(recorder.manualPressPending).toBe(true);
     expect(detector.knockCount).toBe(0);
@@ -124,19 +142,20 @@ describe('grocery press waits for the capture buffer', () => {
     expect(recorder.captureManualKnock()).toBe(false);
     expect(recorder.manualPressPending).toBe(true);
 
-    deliverThrough(detector, pcm, pressAt + msToSamples(MANUAL_PRESS_SETTLE_MS), pressAt);
-    vi.advanceTimersByTime(69);
+    // Wall time past the old 120 ms timer, but the later batch is still held.
+    vi.advanceTimersByTime(MANUAL_PRESS_WALL_CAP_MS - 50 - 1);
     expect(recorder.manualPressPending).toBe(true);
     expect(detector.knockCount).toBe(0);
+    expect(knocks).toEqual([]);
 
-    vi.advanceTimersByTime(1);
+    releaseUntilReady(recorder, detector, pcm, offset, stamp + msToSamples(MANUAL_PRESS_SETTLE_MS));
     expect(recorder.manualPressPending).toBe(false);
     expect(detector.knockCount).toBe(1);
     expect(detector.lastRejection).toBeNull();
     expect(knocks).toEqual([1]);
     expect(weaks).toEqual([]);
 
-    vi.advanceTimersByTime(500);
+    vi.advanceTimersByTime(MANUAL_PRESS_WALL_CAP_MS);
     expect(detector.knockCount).toBe(1);
     expect(knocks).toEqual([1]);
   });
@@ -147,15 +166,19 @@ describe('grocery press waits for the capture buffer', () => {
     early.recorder.onKnockDetected = (count) => earlyKnocks.push(count);
     const earlyPcm = frameAlignedKnock(1);
     const earlyPress = earlyPcm.knockAt - msToSamples(40);
-    deliverThrough(early.detector, earlyPcm.pcm, earlyPress);
+    const earlyOffset = deliverThrough(early.detector, earlyPcm.pcm, earlyPress);
+    const earlyStamp = early.detector.clockSamples;
     expect(early.recorder.captureManualKnock()).toBe(false);
-    deliverThrough(
+    vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
+    expect(early.recorder.manualPressPending).toBe(true);
+    expect(early.detector.knockCount).toBe(0);
+    releaseUntilReady(
+      early.recorder,
       early.detector,
       earlyPcm.pcm,
-      earlyPress + msToSamples(MANUAL_PRESS_SETTLE_MS),
-      earlyPress,
+      earlyOffset,
+      earlyStamp + msToSamples(MANUAL_PRESS_SETTLE_MS),
     );
-    vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
     expect(early.detector.knockCount).toBe(1);
     expect(earlyKnocks).toEqual([1]);
     expect(early.detector.lastRejection).toBeNull();
@@ -167,55 +190,71 @@ describe('grocery press waits for the capture buffer', () => {
     late.recorder.onWeakTap = (reason) => lateWeaks.push(reason);
     const latePcm = frameAlignedKnock(1);
     const latePress = latePcm.knockAt - msToSamples(180);
-    deliverThrough(late.detector, latePcm.pcm, latePress);
+    const lateOffset = deliverThrough(late.detector, latePcm.pcm, latePress);
+    const lateStamp = late.detector.clockSamples;
     expect(late.recorder.captureManualKnock()).toBe(false);
-    deliverThrough(
+    vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
+    expect(late.recorder.manualPressPending).toBe(true);
+    releaseUntilReady(
+      late.recorder,
       late.detector,
       latePcm.pcm,
-      latePress + msToSamples(MANUAL_PRESS_SETTLE_MS),
-      latePress,
+      lateOffset,
+      lateStamp + msToSamples(MANUAL_PRESS_SETTLE_MS),
     );
-    vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
     expect(late.detector.knockCount).toBe(0);
     expect(lateKnocks).toEqual([]);
     expect(lateWeaks).toEqual(['noisy']);
     expect(late.detector.lastRejection).toBe('noisy');
   });
 
-  it('stores a press 50 ms before the knock when the stamp lags one block', () => {
-    const { pcm, knockAt } = frameAlignedKnock(1, 0.2);
-    const acousticPress = knockAt - msToSamples(50);
-    const { recorder, detector } = listeningRecorder();
-    const knocks: number[] = [];
-    recorder.onKnockDetected = (count) => knocks.push(count);
+  it.each([50, 25])(
+    'stores a press %s ms before the knock once the held batch brings the decay in',
+    (leadMs) => {
+      const { pcm, knockAt } = frameAlignedKnock(1, 0.2);
+      const acousticPress = knockAt - msToSamples(leadMs);
+      const { recorder, detector } = listeningRecorder();
+      const knocks: number[] = [];
+      recorder.onKnockDetected = (count) => knocks.push(count);
 
-    // The open 2048-sample block has not been pushed, so the stamp lags it.
-    deliverThrough(detector, pcm, acousticPress);
-    const pressAtSample = detector.clockSamples;
-    const lag = acousticPress - pressAtSample;
-    expect(lag).toBeGreaterThan(0);
-    expect(lag).toBeLessThanOrEqual(FRAME_SIZE);
+      // The open 2048-sample block has not been pushed, so the stamp lags it.
+      const offset = deliverThrough(detector, pcm, acousticPress);
+      const pressAtSample = detector.clockSamples;
+      const lag = acousticPress - pressAtSample;
+      expect(lag).toBeGreaterThan(0);
+      expect(lag).toBeLessThanOrEqual(FRAME_SIZE);
 
-    expect(recorder.captureManualKnock()).toBe(false);
-    expect(detector.clockSamples).toBe(pressAtSample);
-    expect(detector.knockCount).toBe(0);
+      expect(recorder.captureManualKnock()).toBe(false);
+      expect(detector.clockSamples).toBe(pressAtSample);
+      expect(detector.knockCount).toBe(0);
 
-    deliverThrough(
-      detector,
-      pcm,
-      acousticPress + msToSamples(MANUAL_PRESS_SETTLE_MS),
-      pressAtSample,
-    );
-    // The ring now holds the knock decay past stamp + settle. The read must use it.
-    expect(detector.clockSamples).toBeGreaterThan(pressAtSample + msToSamples(MANUAL_PRESS_SETTLE_MS));
-    expect(detector.knockCount).toBe(0);
+      // The wall clock runs, but the batch that holds the decay does not.
+      vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
+      expect(recorder.manualPressPending).toBe(true);
+      expect(detector.knockCount).toBe(0);
+      expect(knocks).toEqual([]);
 
-    vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
-    expect(recorder.manualPressPending).toBe(false);
-    expect(detector.knockCount).toBe(1);
-    expect(detector.lastRejection).toBeNull();
-    expect(knocks).toEqual([1]);
-  });
+      const ready = pressAtSample + msToSamples(MANUAL_PRESS_SETTLE_MS);
+      let cursor = Math.floor(offset / FRAME_SIZE) * FRAME_SIZE;
+      const inner = recorder as unknown as RecorderInner;
+      while (detector.clockSamples < ready) {
+        expect(recorder.manualPressPending).toBe(true);
+        expect(detector.knockCount).toBe(0);
+        expect(cursor + FRAME_SIZE).toBeLessThanOrEqual(pcm.length);
+        inner.ingestFrame(pcm.subarray(cursor, cursor + FRAME_SIZE));
+        cursor += FRAME_SIZE;
+      }
+
+      expect(recorder.manualPressPending).toBe(false);
+      expect(detector.knockCount).toBe(1);
+      expect(detector.lastRejection).toBeNull();
+      expect(knocks).toEqual([1]);
+
+      vi.advanceTimersByTime(MANUAL_PRESS_WALL_CAP_MS);
+      expect(detector.knockCount).toBe(1);
+      expect(knocks).toEqual([1]);
+    },
+  );
 
   it('does not count the press again when the block flushes an auto knock during the wait', () => {
     const { recorder, detector } = listeningRecorder();
@@ -235,7 +274,7 @@ describe('grocery press waits for the capture buffer', () => {
     expect(detector.knockCount).toBe(1);
     expect(knocks).toEqual([1]);
 
-    vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
+    vi.advanceTimersByTime(MANUAL_PRESS_WALL_CAP_MS);
     expect(recorder.manualPressPending).toBe(false);
     expect(detector.knockCount).toBe(1);
     expect(detector.lastRejection).toBeNull();
@@ -265,7 +304,7 @@ describe('grocery press waits for the capture buffer', () => {
       expect(detector.knockCount).toBe(0);
       expect(recorder.captureManualKnock()).toBe(false);
       pump(pressAt + msToSamples(MANUAL_PRESS_SETTLE_MS));
-      vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
+      vi.advanceTimersByTime(MANUAL_PRESS_WALL_CAP_MS);
 
       expect(detector.knockCount).toBe(1);
       expect(knocks).toEqual([1]);
@@ -289,7 +328,7 @@ describe('grocery press waits for the capture buffer', () => {
     const features = recorder.stopAndAnalyze();
     expect(recorder.manualPressPending).toBe(false);
     deliverThrough(detector, pcm, pressAt + msToSamples(MANUAL_PRESS_SETTLE_MS), pressAt);
-    vi.advanceTimersByTime(500);
+    vi.advanceTimersByTime(MANUAL_PRESS_WALL_CAP_MS);
 
     expect(features.knockCount).toBe(0);
     expect(detector.knockCount).toBe(0);

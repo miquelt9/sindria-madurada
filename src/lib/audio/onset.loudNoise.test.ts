@@ -95,15 +95,12 @@ function shopRun(
 }
 
 /**
- * ScriptProcessor publishes 2048-sample blocks. At acoustic time t, only blocks
- * that have ended are in the ring. `heldBlocks` completed blocks stay held as
- * well: the browser graph often keeps more than the one open block, which is
- * the latency a 120 ms settle is there to absorb.
- * The press is stamped on the sample clock at the click, then the read runs
- * after settleMs. Each stored press must add exactly one knock.
- * `closeReadBlock` publishes the 2048-sample block that contains the settle
- * instant. That block can still be open at exactly settleMs (the third knock
- * of a 50 ms lead is about 9 ms short of the boundary), which hides the decay.
+ * ScriptProcessor publishes 2048-sample blocks. At the click, only blocks
+ * that have ended are in the ring. `heldBlocks` completed blocks stay held
+ * as well, so the stamp lags the acoustic press.
+ * The read waits until the audio clock is settleMs past that stamp. Blocks
+ * are released one at a time until then, the same gate the recorder uses.
+ * Each stored press must add exactly one knock.
  */
 function shopRunBuffered(
   seed: number,
@@ -112,7 +109,6 @@ function shopRunBuffered(
   settleMs: number,
   noiseRms = NOISE_RMS,
   heldBlocks = 0,
-  closeReadBlock = false,
 ): { ok: boolean; knockCount: number; aborted: boolean; singles: boolean } {
   const { pcm, presses } = shopPcm(seed, knockRms, noiseRms, pressAfterS);
   const settleSamples = Math.round((settleMs / 1000) * SAMPLE_RATE);
@@ -123,11 +119,6 @@ function shopRunBuffered(
   let singles = true;
   const deliveredAt = (acoustic: number) =>
     Math.max(0, Math.floor(acoustic / FRAME_SIZE) * FRAME_SIZE - hold);
-  const readAt = (acoustic: number) => {
-    const ended = deliveredAt(acoustic);
-    if (!closeReadBlock || acoustic % FRAME_SIZE === 0) return ended;
-    return ended + FRAME_SIZE;
-  };
 
   for (const press of presses) {
     const atPress = deliveredAt(press);
@@ -141,8 +132,8 @@ function shopRunBuffered(
     }
     if (aborted) break;
     const pressAtSample = detector.clockSamples;
-    const atRead = readAt(press + settleSamples);
-    while (offset + FRAME_SIZE <= atRead && offset + FRAME_SIZE <= pcm.length) {
+    const ready = pressAtSample + settleSamples;
+    while (detector.clockSamples < ready && offset + FRAME_SIZE <= pcm.length) {
       detector.pushFrame(pcm.subarray(offset, offset + FRAME_SIZE));
       offset += FRAME_SIZE;
       if (detector.lastRejection) {
@@ -207,17 +198,26 @@ describe('loud shop knocks', () => {
     expect(loud.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
   });
 
-  // Stamp lags by at most one open block. The read ends at the newest sample,
-  // past stamp + settle, so a knock 50 ms after the press keeps its decay
-  // inside the shape gate. The block that contains the 120 ms point is
-  // published: for one of the three knocks that point is still inside it.
-  it('stores each knock once when the press leads the knock by 50 ms in 0.2 RMS noise', () => {
+  it('stores nothing when the press leads the knock by 180 ms in 0.2 RMS noise', () => {
     const runs = Array.from({ length: 8 }, (_, i) =>
-      shopRunBuffered(i + 1, 0.2, -0.05, MANUAL_PRESS_SETTLE_MS, 0.2, 0, true),
+      shopRunBuffered(i + 1, 0.2, -0.18, MANUAL_PRESS_SETTLE_MS, 0.2, 0),
     );
-    expect(runs.map((run) => run.ok)).toEqual([true, true, true, true, true, true, true, true]);
-    expect(runs.every((run) => run.knockCount === 3 && run.singles && !run.aborted)).toBe(true);
+    expect(runs.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
   });
+
+  // The stamp lags by at most one open block. The read waits until the audio
+  // clock is 120 ms past that stamp, so the decay of a knock 25 or 50 ms
+  // later is in the ring.
+  it.each([50, 25])(
+    'stores each knock once when the press leads the knock by %s ms in 0.2 RMS noise',
+    (leadMs) => {
+      const runs = Array.from({ length: 8 }, (_, i) =>
+        shopRunBuffered(i + 1, 0.2, -leadMs / 1000, MANUAL_PRESS_SETTLE_MS, 0.2, 0),
+      );
+      expect(runs.map((run) => run.ok)).toEqual([true, true, true, true, true, true, true, true]);
+      expect(runs.every((run) => run.knockCount === 3 && run.singles && !run.aborted)).toBe(true);
+    },
+  );
 
   // One held block plus the open block (~93 ms). A single open block lags the
   // stamp by only ~46 ms, which leaves a knock 250 ms before the acoustic press
@@ -233,6 +233,13 @@ describe('loud shop knocks', () => {
       expect(runs.every((run) => run.knockCount === 3 && run.singles && !run.aborted)).toBe(true);
     },
   );
+
+  it('stores nothing when the press is 300 ms later in 0.2 RMS noise', () => {
+    const runs = Array.from({ length: 8 }, (_, i) =>
+      shopRunBuffered(i + 1, 0.2, 0.3, MANUAL_PRESS_SETTLE_MS, 0.2, 1),
+    );
+    expect(runs.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
+  });
 
   it('stores nothing for no-knock noise at 0.2 RMS when the read waits', () => {
     const runs = Array.from({ length: 8 }, (_, i) =>
