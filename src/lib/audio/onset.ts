@@ -32,10 +32,11 @@ export const MANUAL_KNOCK_SHAPE_RATIO = 1.25;
  * ScriptProcessor delivers audio in 2048-sample blocks, about 46 ms at
  * 44.1 kHz, and the browser graph often holds more than one block. The
  * press is stamped on the sample clock at the click. After this wait the
- * read runs from about 200 ms before that stamp to 120 ms after it
- * (KNOCK_WINDOW_MS + this wait), so a knock just before the press and one
- * still in the open block are both inside it. Debounce and the stale-spike
- * rule use the stamp, not the later read. This is not a ripeness threshold.
+ * read starts about 200 ms before that stamp and runs through the newest
+ * sample in the ring. The stamp can lag one 2048-sample block, so an end
+ * at the stamp plus this wait stops before a knock that follows the press
+ * and the decay fails the shape gate. Debounce and the stale-spike rule
+ * use the stamp, not the later read. This is not a ripeness threshold.
  */
 export const MANUAL_PRESS_SETTLE_MS = 120;
 
@@ -265,8 +266,8 @@ export class KnockDetector {
    * spike that was not stored, once that sound is older than one knock window.
    * Debounce and that stale rule use the press stamp, not the later read.
    * Pass the sample-clock stamp from the click. After the capture block has
-   * had time to arrive, the read then spans KNOCK_WINDOW_MS before that stamp
-   * through MANUAL_PRESS_SETTLE_MS after it, and the stored spectrum is the
+   * had time to arrive, the read starts KNOCK_WINDOW_MS before that stamp
+   * and ends at the newest sample in the ring. The stored spectrum is the
    * knock-shaped peak inside that span. Without a stamp, the read is the
    * latest knock window at the current clock.
    * A quiet window is a weak tap. A loud window still has to show a knock
@@ -359,14 +360,16 @@ export class KnockDetector {
   }
 
   /**
-   * From about one knock window before the press stamp to one settle after it.
-   * The end is clipped to audio already in the ring.
+   * From one knock window before the press stamp through the newest sample
+   * in the ring. Debounce and the stale rule still use the stamp. The stamp
+   * can lag by one 2048-sample block, so an end at pressAtSample +
+   * MANUAL_PRESS_SETTLE_MS stops before the knock decay already buffered
+   * past that point.
    */
   private readManualPressWindow(pressAtSample: number): Float32Array | null {
-    const settleSamples = Math.round((MANUAL_PRESS_SETTLE_MS / 1000) * this.sampleRate);
-    const spanSamples = Math.round(((KNOCK_WINDOW_MS + MANUAL_PRESS_SETTLE_MS) / 1000) * this.sampleRate);
-    const end = pressAtSample + settleSamples;
-    return this.readSampleRange(end - spanSamples, end);
+    const lookbackSamples = Math.round((KNOCK_WINDOW_MS / 1000) * this.sampleRate);
+    const start = pressAtSample - lookbackSamples;
+    return this.readSampleRange(start, this.totalSamples);
   }
 
   /** KNOCK_WINDOW_MS centered on the chosen attack, clipped to `pcm`. */

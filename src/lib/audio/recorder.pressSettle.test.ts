@@ -13,9 +13,12 @@ const NOISE_RMS = 0.03;
 
 /**
  * The click is stamped on the sample clock. The read waits
- * MANUAL_PRESS_SETTLE_MS (120), then covers about 200 ms before that stamp
- * through 120 ms after it. A press 40 ms before the knock is stored. A press
- * 180 ms before the knock is not: the knock falls after the window.
+ * MANUAL_PRESS_SETTLE_MS (120), then starts about 200 ms before that stamp
+ * and runs through the newest sample in the ring. A press 40 ms before the
+ * knock is stored. A press about 50 ms before the knock is stored when the
+ * stamp lags one block: the knock decay is already in the ring, past
+ * stamp + settle. A press 180 ms before the knock is not: the knock falls
+ * after the audio that has arrived.
  * A second press while the wait is running is ignored. It does not push the timer.
  * If the open block flushes an auto-counted knock during the wait, debounce
  * uses the earlier stamp and does not count a second knock.
@@ -177,6 +180,41 @@ describe('grocery press waits for the capture buffer', () => {
     expect(lateKnocks).toEqual([]);
     expect(lateWeaks).toEqual(['noisy']);
     expect(late.detector.lastRejection).toBe('noisy');
+  });
+
+  it('stores a press 50 ms before the knock when the stamp lags one block', () => {
+    const { pcm, knockAt } = frameAlignedKnock(1, 0.2);
+    const acousticPress = knockAt - msToSamples(50);
+    const { recorder, detector } = listeningRecorder();
+    const knocks: number[] = [];
+    recorder.onKnockDetected = (count) => knocks.push(count);
+
+    // The open 2048-sample block has not been pushed, so the stamp lags it.
+    deliverThrough(detector, pcm, acousticPress);
+    const pressAtSample = detector.clockSamples;
+    const lag = acousticPress - pressAtSample;
+    expect(lag).toBeGreaterThan(0);
+    expect(lag).toBeLessThanOrEqual(FRAME_SIZE);
+
+    expect(recorder.captureManualKnock()).toBe(false);
+    expect(detector.clockSamples).toBe(pressAtSample);
+    expect(detector.knockCount).toBe(0);
+
+    deliverThrough(
+      detector,
+      pcm,
+      acousticPress + msToSamples(MANUAL_PRESS_SETTLE_MS),
+      pressAtSample,
+    );
+    // The ring now holds the knock decay past stamp + settle. The read must use it.
+    expect(detector.clockSamples).toBeGreaterThan(pressAtSample + msToSamples(MANUAL_PRESS_SETTLE_MS));
+    expect(detector.knockCount).toBe(0);
+
+    vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
+    expect(recorder.manualPressPending).toBe(false);
+    expect(detector.knockCount).toBe(1);
+    expect(detector.lastRejection).toBeNull();
+    expect(knocks).toEqual([1]);
   });
 
   it('does not count the press again when the block flushes an auto knock during the wait', () => {

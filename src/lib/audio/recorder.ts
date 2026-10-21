@@ -93,10 +93,12 @@ export class KnockRecorder {
 
   /**
    * Grocery press. The click is stamped on the sample clock immediately.
-   * The shape check runs after MANUAL_PRESS_SETTLE_MS, on a window from about
-   * 200 ms before that stamp to 120 ms after it. A second press while one is
-   * waiting is ignored, so the timer is not pushed later. Returns false until
-   * that read stores a knock; the stored knock is reported through onKnockDetected.
+   * The shape check runs after MANUAL_PRESS_SETTLE_MS. The window starts
+   * about 200 ms before that stamp and ends at the newest sample in the
+   * ring, so a stamp that lags one block still covers the knock decay.
+   * A second press while one is waiting is ignored, so the timer is not
+   * pushed later. Returns false until that read stores a knock; the stored
+   * knock is reported through onKnockDetected.
    */
   captureManualKnock(): boolean {
     if (!this.isListening || !this.detector) return false;
