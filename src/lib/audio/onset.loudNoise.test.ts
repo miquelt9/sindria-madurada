@@ -206,8 +206,8 @@ describe('loud shop knocks', () => {
   });
 
   // The stamp lags by at most one open block. The read waits until the audio
-  // clock is 120 ms past that stamp, so the decay of a knock 25 or 50 ms
-  // later is in the ring.
+  // clock is MANUAL_PRESS_SETTLE_MS past that stamp, so the decay of a knock
+  // 25 or 50 ms later is in the ring.
   it.each([50, 25])(
     'stores each knock once when the press leads the knock by %s ms in 0.2 RMS noise',
     (leadMs) => {

@@ -46,7 +46,8 @@ export class KnockRecorder {
   private weakSent = false;
   /**
    * A grocery press is waiting until the audio clock reaches the stamp
-   * plus MANUAL_PRESS_SETTLE_MS, or until the wall cap.
+   * plus MANUAL_PRESS_SETTLE_MS (the decay of a knock up to ~140 ms later),
+   * or until the wall cap.
    */
   private pendingManual: { pressAtSample: number; readyAtSample: number } | null = null;
   private manualPressPoll: ReturnType<typeof setInterval> | null = null;
@@ -109,9 +110,10 @@ export class KnockRecorder {
   /**
    * Grocery press. The click is stamped on the sample clock immediately.
    * The shape check runs once that clock is at least MANUAL_PRESS_SETTLE_MS
-   * past the stamp, which is when a knock just after the press has its
-   * decay in the ring. Each capture block checks, and a short poll does
-   * too. If the audio has not caught up by MANUAL_PRESS_WALL_CAP_MS, the
+   * past the stamp, which is when a knock as late as ~140 ms after the
+   * stamp still has its decay in the ring. Each capture block checks, and
+   * a short poll does too. If the audio has not caught up by
+   * MANUAL_PRESS_WALL_CAP_MS, the
    * read uses whatever is already there. The window starts about 200 ms
    * before the stamp and ends at the newest sample. A second press while
    * one is waiting is ignored. Returns false until that read stores a

@@ -30,15 +30,15 @@ export const MANUAL_KNOCK_SHAPE_RATIO = 1.25;
 /**
  * Audio that must arrive after a grocery-press stamp before the ring is read.
  * ScriptProcessor delivers audio in 2048-sample blocks, about 46 ms at
- * 44.1 kHz, and blocks often show up in a batch. A 120 ms wall clock can
- * fire while the newest sample is only 93–140 ms past the stamp, which cuts
- * off the decay of a knock that follows the press. The read waits until the
- * audio clock itself has reached the stamp plus this span. The window still
- * starts one knock window before the stamp and runs through the newest
- * sample. Debounce and the stale-spike rule use the stamp, not the read.
- * This is not a ripeness threshold.
+ * 44.1 kHz, and blocks often show up in a batch. A grocery knock lands about
+ * 93–139 ms past the stamp, and its decay block is another ~23 ms later.
+ * Waiting only 120 ms of audio cuts that decay off, so the shape check fails.
+ * The read waits until the audio clock itself has reached the stamp plus this
+ * span. The window still starts one knock window before the stamp and runs
+ * through the newest sample. Debounce and the stale-spike rule use the stamp,
+ * not the read. This is not a ripeness threshold and not an onset cutoff.
  */
-export const MANUAL_PRESS_SETTLE_MS = 120;
+export const MANUAL_PRESS_SETTLE_MS = 200;
 
 /**
  * Wall-clock cap for a grocery press whose audio never catches up.
@@ -369,10 +369,11 @@ export class KnockDetector {
 
   /**
    * From one knock window before the press stamp through the newest sample
-   * in the ring. Debounce and the stale rule still use the stamp. The stamp
-   * can lag by one 2048-sample block, so an end at pressAtSample +
-   * MANUAL_PRESS_SETTLE_MS stops before the knock decay already buffered
-   * past that point.
+   * in the ring. Debounce and the stale rule still use the stamp. The caller
+   * waits until the audio clock reaches the stamp plus MANUAL_PRESS_SETTLE_MS
+   * before this read, so the newest sample includes the decay of a knock that
+   * landed inside that span. Clipping the end to the stamp would drop decay
+   * that is already in the ring past it.
    */
   private readManualPressWindow(pressAtSample: number): Float32Array | null {
     const lookbackSamples = Math.round((KNOCK_WINDOW_MS / 1000) * this.sampleRate);
