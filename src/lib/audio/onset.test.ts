@@ -231,6 +231,51 @@ describe('KnockDetector', () => {
     expect(detector.spectra[0]).toBe(kept);
   });
 
+  it('accepts a second and a third manual knock while the tap is still in the window', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
+    const silence = () => new Float32Array(FRAME_SIZE);
+
+    for (let i = 0; i < 4; i += 1) {
+      expect(detector.pushFrame(silence())).toBe(false);
+    }
+    expect(detector.pushFrame(spikeFrame())).toBe(true);
+    expect(detector.knockCount).toBe(1);
+
+    const addManualKnock = () => {
+      const before = detector.knockCount;
+      // The spike lands inside the debounce, so auto-detection does not count it.
+      const framesBeforeSpike = 5;
+      for (let i = 0; i < framesBeforeSpike; i += 1) {
+        expect(detector.pushFrame(silence())).toBe(false);
+      }
+      expect(detector.pushFrame(spikeFrame())).toBe(false);
+      expect(detector.knockCount).toBe(before);
+
+      // Debounce has elapsed, and the spike hop is still inside the knock window.
+      const framesAfterSpike = 3;
+      for (let i = 0; i < framesAfterSpike; i += 1) {
+        expect(detector.pushFrame(silence())).toBe(false);
+      }
+      const sinceKnock = (framesBeforeSpike + 1 + framesAfterSpike) * frameMs;
+      const sinceSpike = framesAfterSpike * frameMs;
+      expect(sinceKnock).toBeGreaterThanOrEqual(KNOCK_DEBOUNCE_MS);
+      expect(sinceSpike).toBeLessThanOrEqual(KNOCK_WINDOW_MS);
+      expect(detector.captureManualKnock()).toBe(true);
+      expect(detector.lastRejection).toBeNull();
+      expect(detector.knockCount).toBe(before + 1);
+    };
+
+    addManualKnock();
+    expect(detector.knockCount).toBe(2);
+    expect(detector.spectra).toHaveLength(2);
+    addManualKnock();
+    expect(detector.knockCount).toBe(3);
+    expect(detector.spectra).toHaveLength(3);
+    expect(detector.captureManualKnock()).toBe(false);
+    expect(detector.knockCount).toBe(3);
+  });
+
   it('does not store a quiet spike and marks it as a low peak', () => {
     const detector = new KnockDetector(SAMPLE_RATE);
     for (let i = 0; i < 4; i += 1) {

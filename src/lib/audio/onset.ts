@@ -73,6 +73,13 @@ export class KnockDetector {
   private samplesWritten = 0;
   private totalSamples = 0;
   private lastKnockAtMs = Number.NEGATIVE_INFINITY;
+  /** Last time an auto spike was stored as a counted knock. */
+  private lastCountedKnockAtMs = Number.NEGATIVE_INFINITY;
+  /**
+   * Last auto-detected spike or onset that was not stored as a counted knock.
+   * A grocery press is stale against this sound, not against a counted knock.
+   */
+  private lastUncountedSoundAtMs = Number.NEGATIVE_INFINITY;
   private warmupFrames = 0;
   private readonly knockSpectra: Float32Array[] = [];
   private readonly maxKnocks: number;
@@ -101,6 +108,8 @@ export class KnockDetector {
     this.samplesWritten = 0;
     this.totalSamples = 0;
     this.lastKnockAtMs = Number.NEGATIVE_INFINITY;
+    this.lastCountedKnockAtMs = Number.NEGATIVE_INFINITY;
+    this.lastUncountedSoundAtMs = Number.NEGATIVE_INFINITY;
     this.warmupFrames = 0;
     this.knockSpectra.length = 0;
     this.liveRms = 0;
@@ -138,6 +147,7 @@ export class KnockDetector {
 
     if (isLoud && isSpike && debounced) {
       if (frameIsClipped(frame)) {
+        this.noteUncountedSound(nowMs);
         this.lastKnockAtMs = nowMs;
         this.lastRejection = 'noisy';
         return false;
@@ -145,13 +155,19 @@ export class KnockDetector {
       const spectrum = this.captureKnockSpectrum();
       if (spectrum) {
         this.lastKnockAtMs = nowMs;
+        this.lastCountedKnockAtMs = nowMs;
+        this.lastUncountedSoundAtMs = Number.NEGATIVE_INFINITY;
         this.knockSpectra.push(spectrum);
         return true;
       }
+      this.noteUncountedSound(nowMs);
     } else if (isSpike && debounced && !isLoud) {
+      this.noteUncountedSound(nowMs);
       this.lastKnockAtMs = nowMs;
       this.lastRejection = 'low_peak';
       return false;
+    } else if (isSpike) {
+      this.noteUncountedSound(nowMs);
     }
 
     this.updateNoiseFloor(stats.frameRms, isLoud);
@@ -159,30 +175,46 @@ export class KnockDetector {
   }
 
   /**
-   * Grocery fallback. A press more than one knock window after a counted
-   * knock is stale: ignore it, and do not reject knocks already stored.
+   * Grocery fallback. A press is stale only against the last auto-detected
+   * spike that was not stored as a knock, once that sound is older than one
+   * knock window. A counted knock does not make the next press stale.
+   * A window that fails after a knock is already stored is ignored, so it
+   * does not reject those knocks.
    */
   captureManualKnock(): boolean {
     if (this.knockSpectra.length >= this.maxKnocks) return false;
     const nowMs = this.currentTimeMs();
-    const ageMs = nowMs - this.lastKnockAtMs;
-    if (this.knockSpectra.length > 0 && ageMs > KNOCK_WINDOW_MS) return false;
-    if (ageMs < KNOCK_DEBOUNCE_MS) return false;
+    if (nowMs - this.lastKnockAtMs < KNOCK_DEBOUNCE_MS) return false;
+    if (this.manualPressIsStale(nowMs)) return false;
     this.lastRejection = null;
     const captured = this.readKnockPcm();
     if (!captured) {
-      this.lastRejection = 'noisy';
+      if (this.knockSpectra.length === 0) this.lastRejection = 'noisy';
       return false;
     }
     const quality = classifyTapPcm(captured, this.noiseFloor);
     if (!quality.ok) {
+      if (this.knockSpectra.length > 0) return false;
       this.lastKnockAtMs = nowMs;
       this.lastRejection = quality.reason;
       return false;
     }
     this.lastKnockAtMs = nowMs;
+    this.lastCountedKnockAtMs = nowMs;
+    this.lastUncountedSoundAtMs = Number.NEGATIVE_INFINITY;
     this.knockSpectra.push(fftMagnitudes(applyHann(captured)));
     return true;
+  }
+
+  /** An uncounted auto spike older than the knock window. A counted knock is not a reference. */
+  private manualPressIsStale(nowMs: number): boolean {
+    if (this.lastUncountedSoundAtMs === Number.NEGATIVE_INFINITY) return false;
+    if (this.lastCountedKnockAtMs >= this.lastUncountedSoundAtMs) return false;
+    return nowMs - this.lastUncountedSoundAtMs > KNOCK_WINDOW_MS;
+  }
+
+  private noteUncountedSound(nowMs: number): void {
+    this.lastUncountedSoundAtMs = nowMs;
   }
 
   private currentTimeMs(): number {
