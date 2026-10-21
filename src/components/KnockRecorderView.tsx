@@ -253,6 +253,8 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
   const handleManualKnock = () => {
     const recorder = recorderRef.current;
     if (!recorder || finishingRef.current) return;
+    // The read waits for the capture buffer. The count updates from
+    // onKnockDetected. A second press while that read is waiting is ignored.
     const captured = recorder.captureManualKnock();
     if (captured) setKnockCount(recorder.getKnockCount());
   };

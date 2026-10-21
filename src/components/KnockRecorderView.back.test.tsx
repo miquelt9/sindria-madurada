@@ -161,4 +161,23 @@ describe('Knock back control', () => {
     expect(onWeakTap).toHaveBeenCalledWith('noisy');
     expect(onKnockComplete).not.toHaveBeenCalled();
   });
+
+  it('stops the recorder on unmount and back while a grocery press is waiting', async () => {
+    const onBack = vi.fn();
+    const first = renderKnock(onBack);
+    fireEvent.click(screen.getByRole('button', { name: en.knockStartBtn }));
+    fireEvent.click(await screen.findByRole('button', { name: en.knockTapManual }));
+    const mounted = recorderHost.instances.at(-1);
+    expect(mounted?.captureManualKnock).toHaveBeenCalledTimes(1);
+    first.unmount();
+    expect(mounted?.stopAndAnalyze).toHaveBeenCalled();
+
+    renderKnock(onBack);
+    fireEvent.click(screen.getByRole('button', { name: en.knockStartBtn }));
+    fireEvent.click(await screen.findByRole('button', { name: en.knockTapManual }));
+    const recorder = recorderHost.instances.at(-1);
+    fireEvent.click(screen.getByRole('button', { name: en.back }));
+    expect(recorder?.stopAndAnalyze).toHaveBeenCalled();
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
 });

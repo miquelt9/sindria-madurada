@@ -27,6 +27,18 @@ export const MANUAL_KNOCK_BLOCK_HOPS = 4;
 export const MANUAL_KNOCK_DECAY_BLOCKS = 2;
 export const MANUAL_KNOCK_SHAPE_RATIO = 1.25;
 
+/**
+ * Wait after a grocery press before reading the ring.
+ * ScriptProcessor delivers audio in 2048-sample blocks, about 46 ms at
+ * 44.1 kHz, and the browser graph often holds more than one block. A
+ * press 40 ms after the knock was reading a ring that did not contain
+ * the knock yet. 120 ms lets that block arrive. The read is still the
+ * 200 ms window, so a knock from just before the press stays inside it:
+ * the press can lead the knock by about 80 ms. A press much earlier
+ * than that does not cover the knock. This is not a ripeness threshold.
+ */
+export const MANUAL_PRESS_SETTLE_MS = 120;
+
 /** Float PCM reaches full scale at 1. Not a ripeness threshold. */
 export const PCM_FULL_SCALE = 1;
 

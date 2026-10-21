@@ -1,5 +1,5 @@
 import { aggregateKnockFeatures } from './features';
-import { FRAME_SIZE, KnockDetector, MAX_KNOCKS, WeakTapReason } from './onset';
+import { FRAME_SIZE, KnockDetector, MANUAL_PRESS_SETTLE_MS, MAX_KNOCKS, WeakTapReason } from './onset';
 import { AudioFeatures } from '../types';
 
 type WakeLockSentinelLike = {
@@ -34,6 +34,8 @@ export class KnockRecorder {
   public onVolumeUpdate?: (volume: number) => void;
   public onSpectrumUpdate?: (frequencyData: Uint8Array) => void;
   private weakSent = false;
+  /** A grocery press is waiting for the capture buffer to catch up. */
+  private manualPressTimer: ReturnType<typeof setTimeout> | null = null;
 
   get liveRms(): number {
     return this.detector?.liveRms ?? this._liveRms;
@@ -84,21 +86,49 @@ export class KnockRecorder {
     this.monitorLoop();
   }
 
-  /** Manual grocery fallback: snapshot the current ring buffer as a knock. */
+  /** True while a grocery press is waiting for the capture buffer. */
+  get manualPressPending(): boolean {
+    return this.manualPressTimer !== null;
+  }
+
+  /**
+   * Grocery press. The shape check runs after MANUAL_PRESS_SETTLE_MS, once
+   * the 2048-sample capture block can include the knock. A second press
+   * while one is waiting is ignored, so the timer is not pushed later.
+   * Returns false until that read stores a knock; the stored knock is
+   * reported through onKnockDetected.
+   */
   captureManualKnock(): boolean {
     if (!this.isListening || !this.detector) return false;
+    if (this.manualPressTimer !== null) return false;
+    this.manualPressTimer = setTimeout(() => {
+      this.manualPressTimer = null;
+      this.finishManualKnock();
+    }, MANUAL_PRESS_SETTLE_MS);
+    return false;
+  }
+
+  /** Drop a press that has not been read yet. Back, finish, and unmount do this. */
+  cancelPendingManualKnock(): void {
+    if (this.manualPressTimer === null) return;
+    clearTimeout(this.manualPressTimer);
+    this.manualPressTimer = null;
+  }
+
+  private finishManualKnock(): void {
+    if (!this.isListening || !this.detector) return;
     const captured = this.detector.captureManualKnock();
     if (this.detector.lastRejection) {
       this.emitWeak(this.detector.lastRejection);
-      return false;
+      return;
     }
     if (captured) {
       this.emitKnock();
     }
-    return captured;
   }
 
   stopAndAnalyze(): AudioFeatures {
+    this.cancelPendingManualKnock();
     const sampleRate = this.audioContext?.sampleRate ?? 44100;
     const spectra = this.detector ? [...this.detector.spectra] : [];
 
@@ -169,6 +199,7 @@ export class KnockRecorder {
   }
 
   private emitWeak(reason: WeakTapReason): void {
+    this.cancelPendingManualKnock();
     if (this.weakSent) return;
     this.weakSent = true;
     this.onWeakTap?.(reason);

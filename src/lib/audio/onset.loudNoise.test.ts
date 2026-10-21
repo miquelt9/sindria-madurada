@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FRAME_SIZE, KnockDetector } from './onset';
+import { FRAME_SIZE, KnockDetector, MANUAL_PRESS_SETTLE_MS } from './onset';
 
 const SAMPLE_RATE = 44100;
 const NOISE_RMS = 0.03;
@@ -19,7 +19,12 @@ function mulberry32(seed: number): () => number {
 }
 
 /** Steady shop noise plus three grocery knocks. Pass 0 to leave the knocks out. */
-function shopPcm(seed: number, knockRms: number, noiseRms = NOISE_RMS): { pcm: Float32Array; presses: number[] } {
+function shopPcm(
+  seed: number,
+  knockRms: number,
+  noiseRms = NOISE_RMS,
+  pressAfterS = PRESS_AFTER_S,
+): { pcm: Float32Array; presses: number[] } {
   const n = Math.floor(DURATION_S * SAMPLE_RATE);
   const pcm = new Float32Array(n);
   const rand = mulberry32(seed);
@@ -29,7 +34,7 @@ function shopPcm(seed: number, knockRms: number, noiseRms = NOISE_RMS): { pcm: F
   if (knockRms <= 0) {
     return {
       pcm,
-      presses: KNOCK_TIMES_S.map((t) => Math.floor((t + PRESS_AFTER_S) * SAMPLE_RATE)),
+      presses: KNOCK_TIMES_S.map((t) => Math.floor((t + pressAfterS) * SAMPLE_RATE)),
     };
   }
   const knockLen = Math.floor(0.02 * SAMPLE_RATE);
@@ -47,14 +52,14 @@ function shopPcm(seed: number, knockRms: number, noiseRms = NOISE_RMS): { pcm: F
   }
   return {
     pcm,
-    presses: KNOCK_TIMES_S.map((t) => Math.floor((t + PRESS_AFTER_S) * SAMPLE_RATE)),
+    presses: KNOCK_TIMES_S.map((t) => Math.floor((t + pressAfterS) * SAMPLE_RATE)),
   };
 }
 
 /**
- * Contiguous frames, as ScriptProcessor delivers them. A lastRejection aborts
- * the session the way KnockRecorder does. A grocery press follows each knock
- * by 150 ms.
+ * Pushes each full frame as soon as the loop reaches it, including samples
+ * after the press in that frame. A lastRejection aborts the session the way
+ * KnockRecorder does. A grocery press follows each knock by 150 ms.
  */
 function shopRun(
   seed: number,
@@ -89,6 +94,51 @@ function shopRun(
   };
 }
 
+/**
+ * ScriptProcessor publishes 2048-sample blocks. At the read, only blocks that
+ * have ended are in the ring; the in-progress block is withheld. settleMs is
+ * how long after the press that read runs. A 40 ms press with settle 0 is the
+ * browser miss: the knock still overlaps the open block, so the shape check
+ * sees noise. MANUAL_PRESS_SETTLE_MS lets that block arrive and still leaves
+ * the knock inside the 200 ms window.
+ */
+function shopRunBuffered(
+  seed: number,
+  knockRms: number,
+  pressAfterS: number,
+  settleMs: number,
+  noiseRms = NOISE_RMS,
+): { ok: boolean; knockCount: number; aborted: boolean } {
+  const { pcm, presses } = shopPcm(seed, knockRms, noiseRms, pressAfterS);
+  const settleSamples = Math.round((settleMs / 1000) * SAMPLE_RATE);
+  const detector = new KnockDetector(SAMPLE_RATE);
+  let offset = 0;
+  let aborted = false;
+  for (const press of presses) {
+    const delivered = Math.floor((press + settleSamples) / FRAME_SIZE) * FRAME_SIZE;
+    while (offset + FRAME_SIZE <= delivered && offset + FRAME_SIZE <= pcm.length) {
+      detector.pushFrame(pcm.subarray(offset, offset + FRAME_SIZE));
+      offset += FRAME_SIZE;
+      if (detector.lastRejection) {
+        aborted = true;
+        break;
+      }
+    }
+    if (aborted) break;
+    detector.captureManualKnock();
+    if (detector.lastRejection) {
+      aborted = true;
+      break;
+    }
+    if (detector.knockCount >= 3) break;
+  }
+  return {
+    ok: !aborted && detector.knockCount >= 3,
+    knockCount: detector.knockCount,
+    aborted,
+  };
+}
+
 describe('loud shop knocks', () => {
   it('reaches a result on all 8 steady-noise knock-and-press runs', () => {
     const runs = Array.from({ length: 8 }, (_, i) => shopRun(i + 1, 0.03));
@@ -104,5 +154,27 @@ describe('loud shop knocks', () => {
   it('still stores nothing when that steady noise is louder', () => {
     const runs = Array.from({ length: 8 }, (_, i) => shopRun(i + 1, 0, 0.15));
     expect(runs.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
+  });
+
+  it('stores nothing when a 40 ms press reads before the 2048-sample block arrives', () => {
+    const runs = Array.from({ length: 8 }, (_, i) => shopRunBuffered(i + 1, 0.03, 0.04, 0));
+    expect(runs.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
+  });
+
+  it('stores three knocks when that 40 ms press waits for the capture block', () => {
+    const runs = Array.from({ length: 8 }, (_, i) =>
+      shopRunBuffered(i + 1, 0.03, 0.04, MANUAL_PRESS_SETTLE_MS),
+    );
+    expect(runs.map((run) => run.ok)).toEqual([true, true, true, true, true, true, true, true]);
+    expect(runs.every((run) => run.knockCount === 3 && !run.aborted)).toBe(true);
+  });
+
+  it('still stores nothing for no-knock noise when the read waits for the block', () => {
+    const quiet = Array.from({ length: 8 }, (_, i) => shopRunBuffered(i + 1, 0, 0.04, MANUAL_PRESS_SETTLE_MS));
+    const loud = Array.from({ length: 8 }, (_, i) =>
+      shopRunBuffered(i + 1, 0, 0.04, MANUAL_PRESS_SETTLE_MS, 0.15),
+    );
+    expect(quiet.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
+    expect(loud.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
   });
 });
