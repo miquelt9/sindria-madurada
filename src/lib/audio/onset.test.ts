@@ -152,6 +152,21 @@ describe('KnockDetector', () => {
     return frame;
   }
 
+  /** Steady hum. Flat hops, so it is not itself a knock. */
+  function steadyFrame(): Float32Array {
+    const frame = new Float32Array(FRAME_SIZE);
+    for (let i = 0; i < FRAME_SIZE; i += 1) {
+      frame[i] = 0.02 * Math.sin((2 * Math.PI * 120 * i) / SAMPLE_RATE);
+    }
+    return frame;
+  }
+
+  function knockInNoise(): Float32Array {
+    const frame = steadyFrame();
+    for (let i = 0; i < HOP_SIZE; i += 1) frame[i] += 0.35;
+    return frame;
+  }
+
   it('ignores an empty push and a buffer shorter than one frame', () => {
     const detector = new KnockDetector(SAMPLE_RATE);
     expect(detector.pushFrame(new Float32Array())).toBe(false);
@@ -283,6 +298,67 @@ describe('KnockDetector', () => {
     expect(detector.spectra).toHaveLength(3);
     expect(detector.captureManualKnock()).toBe(false);
     expect(detector.knockCount).toBe(3);
+  });
+
+  it('does not count a grocery press 150 ms after an auto-counted knock in steady noise', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    for (let i = 0; i < 4; i += 1) {
+      expect(detector.pushFrame(steadyFrame())).toBe(false);
+    }
+    expect(detector.pushFrame(knockInNoise())).toBe(true);
+    expect(detector.knockCount).toBe(1);
+    const kept = detector.spectra[0];
+
+    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
+    let elapsed = 0;
+    while (elapsed + frameMs <= 150) {
+      expect(detector.pushFrame(steadyFrame())).toBe(false);
+      elapsed += frameMs;
+    }
+    const remain = Math.round(((150 - elapsed) / 1000) * SAMPLE_RATE);
+    expect(remain).toBeGreaterThan(0);
+    expect(detector.pushFrame(steadyFrame().subarray(0, remain))).toBe(false);
+    elapsed += (remain / SAMPLE_RATE) * 1000;
+    expect(elapsed).toBeGreaterThan(140);
+    expect(elapsed).toBeLessThan(KNOCK_DEBOUNCE_MS);
+    expect(elapsed).toBeLessThan(KNOCK_WINDOW_MS);
+
+    expect(detector.captureManualKnock()).toBe(false);
+    expect(detector.lastRejection).toBeNull();
+    expect(detector.knockCount).toBe(1);
+    expect(detector.spectra).toHaveLength(1);
+    expect(detector.spectra[0]).toBe(kept);
+  });
+
+  it('accepts a manual press after the auto-knock debounce window', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
+    for (let i = 0; i < 4; i += 1) {
+      expect(detector.pushFrame(steadyFrame())).toBe(false);
+    }
+    expect(detector.pushFrame(knockInNoise())).toBe(true);
+    expect(detector.knockCount).toBe(1);
+
+    const framesBeforeSpike = 5;
+    for (let i = 0; i < framesBeforeSpike; i += 1) {
+      expect(detector.pushFrame(steadyFrame())).toBe(false);
+    }
+    expect(detector.pushFrame(knockInNoise())).toBe(false);
+    expect(detector.knockCount).toBe(1);
+
+    const framesAfterSpike = 3;
+    for (let i = 0; i < framesAfterSpike; i += 1) {
+      expect(detector.pushFrame(steadyFrame())).toBe(false);
+    }
+    const sinceKnock = (framesBeforeSpike + 1 + framesAfterSpike) * frameMs;
+    const sinceSpike = framesAfterSpike * frameMs;
+    expect(sinceKnock).toBeGreaterThanOrEqual(KNOCK_DEBOUNCE_MS);
+    expect(sinceSpike).toBeLessThanOrEqual(KNOCK_WINDOW_MS);
+
+    expect(detector.captureManualKnock()).toBe(true);
+    expect(detector.lastRejection).toBeNull();
+    expect(detector.knockCount).toBe(2);
+    expect(detector.spectra).toHaveLength(2);
   });
 
   it('does not store a quiet spike and marks it as a low peak', () => {

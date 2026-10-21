@@ -73,6 +73,8 @@ export class KnockDetector {
   private samplesWritten = 0;
   private totalSamples = 0;
   private lastKnockAtMs = Number.NEGATIVE_INFINITY;
+  /** Last time pushFrame stored a knock. Manual presses inside this debounce are duplicates. */
+  private lastAutoCountedAtMs = Number.NEGATIVE_INFINITY;
   /** Last time an auto spike was stored as a counted knock. */
   private lastCountedKnockAtMs = Number.NEGATIVE_INFINITY;
   /**
@@ -108,6 +110,7 @@ export class KnockDetector {
     this.samplesWritten = 0;
     this.totalSamples = 0;
     this.lastKnockAtMs = Number.NEGATIVE_INFINITY;
+    this.lastAutoCountedAtMs = Number.NEGATIVE_INFINITY;
     this.lastCountedKnockAtMs = Number.NEGATIVE_INFINITY;
     this.lastUncountedSoundAtMs = Number.NEGATIVE_INFINITY;
     this.warmupFrames = 0;
@@ -155,6 +158,7 @@ export class KnockDetector {
       const spectrum = this.captureKnockSpectrum();
       if (spectrum) {
         this.lastKnockAtMs = nowMs;
+        this.lastAutoCountedAtMs = nowMs;
         this.lastCountedKnockAtMs = nowMs;
         this.lastUncountedSoundAtMs = Number.NEGATIVE_INFINITY;
         this.knockSpectra.push(spectrum);
@@ -175,15 +179,17 @@ export class KnockDetector {
   }
 
   /**
-   * Grocery fallback. A press is stale only against the last auto-detected
-   * spike that was not stored as a knock, once that sound is older than one
-   * knock window. A counted knock does not make the next press stale.
-   * A window that fails after a knock is already stored is ignored, so it
-   * does not reject those knocks.
+   * Grocery fallback. A press inside the debounce of the last auto-counted
+   * knock is the same window that makes auto detection ignore follow-up
+   * spikes, so it is not a second knock. A press is stale only against the
+   * last auto-detected spike that was not stored, once that sound is older
+   * than one knock window. A window that fails after a knock is already
+   * stored is ignored, so it does not reject those knocks.
    */
   captureManualKnock(): boolean {
     if (this.knockSpectra.length >= this.maxKnocks) return false;
     const nowMs = this.currentTimeMs();
+    if (nowMs - this.lastAutoCountedAtMs < KNOCK_DEBOUNCE_MS) return false;
     if (nowMs - this.lastKnockAtMs < KNOCK_DEBOUNCE_MS) return false;
     if (this.manualPressIsStale(nowMs)) return false;
     this.lastRejection = null;
