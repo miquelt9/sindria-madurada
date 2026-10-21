@@ -11,6 +11,22 @@ export const HOP_SIZE = 128;
 export const MAX_KNOCKS = 3;
 export const WARMUP_FRAMES = 4;
 
+/**
+ * Grocery-press shape, not a ripeness or loudness threshold.
+ * A knock in the press window is a short attack followed by a decay.
+ * Each block is 4 hops, about 12 ms, so it can sit on a ~20 ms tap.
+ * The decay block is two blocks later, about 23 ms, after that tap has
+ * fallen. Steady noise at any level moves block to block by about
+ * 1.02–1.08. The shop knocks in the loud-noise harness (peak-to-mean
+ * about 1.74–1.80, under SPIKE_RATIO) still rise by at least 1.40 and
+ * fall by at least 1.50. 1.25 sits in that gap. The adaptive noise
+ * floor is not the baseline: loud steady noise barely moves it, so a
+ * level check alone would store a press with no knock.
+ */
+export const MANUAL_KNOCK_BLOCK_HOPS = 4;
+export const MANUAL_KNOCK_DECAY_BLOCKS = 2;
+export const MANUAL_KNOCK_SHAPE_RATIO = 1.25;
+
 /** Float PCM reaches full scale at 1. Not a ripeness threshold. */
 export const PCM_FULL_SCALE = 1;
 
@@ -44,6 +60,41 @@ export function classifyTapPcm(
     return { ok: false, reason: 'noisy' };
   }
   return { ok: true };
+}
+
+/**
+ * True when the window has a sharp attack and a later decay.
+ * Scale-free: the comparison is the previous block, not an absolute level.
+ */
+export function windowHasKnockShape(pcm: Float32Array): boolean {
+  const block = MANUAL_KNOCK_BLOCK_HOPS * HOP_SIZE;
+  const blocks: number[] = [];
+  for (let i = 0; i + block <= pcm.length; i += block) {
+    let sumSq = 0;
+    for (let j = 0; j < block; j += 1) {
+      const s = pcm[i + j];
+      sumSq += s * s;
+    }
+    blocks.push(Math.sqrt(sumSq / block));
+  }
+
+  const decayRatio = (at: number): number => {
+    const laterAt = at + MANUAL_KNOCK_DECAY_BLOCKS;
+    if (laterAt >= blocks.length) return 0;
+    const later = blocks[laterAt];
+    if (later <= 0) return blocks[at] > 0 ? Number.POSITIVE_INFINITY : 0;
+    return blocks[at] / later;
+  };
+
+  // The tap can start at the leading edge, where there is no earlier block.
+  if (decayRatio(0) >= MANUAL_KNOCK_SHAPE_RATIO) return true;
+
+  for (let i = 1; i < blocks.length; i += 1) {
+    const prev = blocks[i - 1];
+    const rise = prev > 0 ? blocks[i] / prev : blocks[i] > 0 ? Number.POSITIVE_INFINITY : 0;
+    if (rise >= MANUAL_KNOCK_SHAPE_RATIO && decayRatio(i) >= MANUAL_KNOCK_SHAPE_RATIO) return true;
+  }
+  return false;
 }
 
 const RING_DURATION_MS = 500;
@@ -180,9 +231,9 @@ export class KnockDetector {
    * same window that makes auto detection ignore follow-up spikes, so it is
    * not a second knock. A press is stale only against the last auto-detected
    * spike that was not stored, once that sound is older than one knock window.
-   * A quiet or clipped window is a weak tap. Steady shop noise flattens the
-   * spike ratio of a real knock, so a loud window is stored anyway. A failure
-   * after a knock is already stored does not reject those knocks.
+   * A quiet window is a weak tap. A loud window still has to show a knock
+   * attack and decay; steady noise does not. A failure after a knock is
+   * already stored does not reject those knocks.
    */
   captureManualKnock(): boolean {
     if (this.knockSpectra.length >= this.maxKnocks) return false;
@@ -200,6 +251,12 @@ export class KnockDetector {
       if (this.knockSpectra.length > 0) return false;
       this.lastKnockAtMs = nowMs;
       this.lastRejection = 'low_peak';
+      return false;
+    }
+    if (!windowHasKnockShape(captured)) {
+      if (this.knockSpectra.length > 0) return false;
+      this.lastKnockAtMs = nowMs;
+      this.lastRejection = 'noisy';
       return false;
     }
     this.lastKnockAtMs = nowMs;
