@@ -361,6 +361,52 @@ describe('KnockDetector', () => {
     expect(detector.spectra).toHaveLength(2);
   });
 
+  it('keeps a counted knock when a later quiet spike would have been a low peak', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    for (let i = 0; i < 4; i += 1) {
+      expect(detector.pushFrame(new Float32Array(FRAME_SIZE))).toBe(false);
+    }
+    expect(detector.pushFrame(spikeFrame())).toBe(true);
+    expect(detector.knockCount).toBe(1);
+    const kept = detector.spectra[0];
+
+    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
+    const frames = Math.ceil((KNOCK_DEBOUNCE_MS + 20) / frameMs);
+    for (let i = 0; i < frames; i += 1) {
+      expect(detector.pushFrame(new Float32Array(FRAME_SIZE))).toBe(false);
+    }
+
+    const quiet = new Float32Array(FRAME_SIZE);
+    for (let i = 0; i < HOP_SIZE; i += 1) quiet[i] = 0.004;
+    expect(detector.pushFrame(quiet)).toBe(false);
+    expect(detector.lastRejection).toBeNull();
+    expect(detector.knockCount).toBe(1);
+    expect(detector.spectra).toHaveLength(1);
+    expect(detector.spectra[0]).toBe(kept);
+  });
+
+  it('keeps a counted knock when a later loud spike is clipped', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    for (let i = 0; i < 4; i += 1) {
+      expect(detector.pushFrame(new Float32Array(FRAME_SIZE))).toBe(false);
+    }
+    expect(detector.pushFrame(spikeFrame())).toBe(true);
+    const kept = detector.spectra[0];
+
+    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
+    const frames = Math.ceil((KNOCK_DEBOUNCE_MS + 20) / frameMs);
+    for (let i = 0; i < frames; i += 1) {
+      expect(detector.pushFrame(new Float32Array(FRAME_SIZE))).toBe(false);
+    }
+
+    const clipped = spikeFrame();
+    clipped[0] = 1;
+    expect(detector.pushFrame(clipped)).toBe(false);
+    expect(detector.lastRejection).toBeNull();
+    expect(detector.knockCount).toBe(1);
+    expect(detector.spectra[0]).toBe(kept);
+  });
+
   it('does not store a quiet spike and marks it as a low peak', () => {
     const detector = new KnockDetector(SAMPLE_RATE);
     for (let i = 0; i < 4; i += 1) {

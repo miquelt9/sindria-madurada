@@ -1,3 +1,5 @@
+import type { AppStep } from '../../components/ui/AppShell';
+
 /** From the third weak tap on, the calmer line and the restart action appear. */
 export const WEAK_TAP_CALM_FROM = 3;
 
@@ -8,7 +10,7 @@ export function weakTapTone(count: number): WeakTapTone {
 }
 
 export interface WeakTapState {
-  step: string;
+  step: AppStep;
   knockPhase: 'capture' | 'retry';
   weakTapCount: number;
   knockSession: number;
