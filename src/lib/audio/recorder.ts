@@ -92,18 +92,19 @@ export class KnockRecorder {
   }
 
   /**
-   * Grocery press. The shape check runs after MANUAL_PRESS_SETTLE_MS, once
-   * the 2048-sample capture block can include the knock. A second press
-   * while one is waiting is ignored, so the timer is not pushed later.
-   * Returns false until that read stores a knock; the stored knock is
-   * reported through onKnockDetected.
+   * Grocery press. The click is stamped on the sample clock immediately.
+   * The shape check runs after MANUAL_PRESS_SETTLE_MS, on a window from about
+   * 200 ms before that stamp to 120 ms after it. A second press while one is
+   * waiting is ignored, so the timer is not pushed later. Returns false until
+   * that read stores a knock; the stored knock is reported through onKnockDetected.
    */
   captureManualKnock(): boolean {
     if (!this.isListening || !this.detector) return false;
     if (this.manualPressTimer !== null) return false;
+    const pressAtSample = this.detector.clockSamples;
     this.manualPressTimer = setTimeout(() => {
       this.manualPressTimer = null;
-      this.finishManualKnock();
+      this.finishManualKnock(pressAtSample);
     }, MANUAL_PRESS_SETTLE_MS);
     return false;
   }
@@ -115,9 +116,9 @@ export class KnockRecorder {
     this.manualPressTimer = null;
   }
 
-  private finishManualKnock(): void {
+  private finishManualKnock(pressAtSample: number): void {
     if (!this.isListening || !this.detector) return;
-    const captured = this.detector.captureManualKnock();
+    const captured = this.detector.captureManualKnock(pressAtSample);
     if (this.detector.lastRejection) {
       this.emitWeak(this.detector.lastRejection);
       return;

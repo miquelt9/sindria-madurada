@@ -30,12 +30,12 @@ export const MANUAL_KNOCK_SHAPE_RATIO = 1.25;
 /**
  * Wait after a grocery press before reading the ring.
  * ScriptProcessor delivers audio in 2048-sample blocks, about 46 ms at
- * 44.1 kHz, and the browser graph often holds more than one block. A
- * press 40 ms after the knock was reading a ring that did not contain
- * the knock yet. 120 ms lets that block arrive. The read is still the
- * 200 ms window, so a knock from just before the press stays inside it:
- * the press can lead the knock by about 80 ms. A press much earlier
- * than that does not cover the knock. This is not a ripeness threshold.
+ * 44.1 kHz, and the browser graph often holds more than one block. The
+ * press is stamped on the sample clock at the click. After this wait the
+ * read runs from about 200 ms before that stamp to 120 ms after it
+ * (KNOCK_WINDOW_MS + this wait), so a knock just before the press and one
+ * still in the open block are both inside it. Debounce and the stale-spike
+ * rule use the stamp, not the later read. This is not a ripeness threshold.
  */
 export const MANUAL_PRESS_SETTLE_MS = 120;
 
@@ -75,10 +75,11 @@ export function classifyTapPcm(
 }
 
 /**
- * True when the window has a sharp attack and a later decay.
+ * Block index of the strongest knock-shaped attack in the window, or null.
  * Scale-free: the comparison is the previous block, not an absolute level.
+ * The leading block can count on decay alone, where there is no earlier block.
  */
-export function windowHasKnockShape(pcm: Float32Array): boolean {
+export function locateKnockShape(pcm: Float32Array): number | null {
   const block = MANUAL_KNOCK_BLOCK_HOPS * HOP_SIZE;
   const blocks: number[] = [];
   for (let i = 0; i + block <= pcm.length; i += block) {
@@ -98,15 +99,29 @@ export function windowHasKnockShape(pcm: Float32Array): boolean {
     return blocks[at] / later;
   };
 
-  // The tap can start at the leading edge, where there is no earlier block.
-  if (decayRatio(0) >= MANUAL_KNOCK_SHAPE_RATIO) return true;
+  const passes = (at: number): boolean => {
+    if (decayRatio(at) < MANUAL_KNOCK_SHAPE_RATIO) return false;
+    if (at === 0) return true;
+    const prev = blocks[at - 1];
+    const rise = prev > 0 ? blocks[at] / prev : blocks[at] > 0 ? Number.POSITIVE_INFINITY : 0;
+    return rise >= MANUAL_KNOCK_SHAPE_RATIO;
+  };
 
-  for (let i = 1; i < blocks.length; i += 1) {
-    const prev = blocks[i - 1];
-    const rise = prev > 0 ? blocks[i] / prev : blocks[i] > 0 ? Number.POSITIVE_INFINITY : 0;
-    if (rise >= MANUAL_KNOCK_SHAPE_RATIO && decayRatio(i) >= MANUAL_KNOCK_SHAPE_RATIO) return true;
+  let best = -1;
+  let bestRms = -1;
+  for (let i = 0; i < blocks.length; i += 1) {
+    if (!passes(i)) continue;
+    if (blocks[i] > bestRms) {
+      best = i;
+      bestRms = blocks[i];
+    }
   }
-  return false;
+  return best >= 0 ? best : null;
+}
+
+/** True when the window has a sharp attack and a later decay. */
+export function windowHasKnockShape(pcm: Float32Array): boolean {
+  return locateKnockShape(pcm) !== null;
 }
 
 const RING_DURATION_MS = 500;
@@ -156,6 +171,11 @@ export class KnockDetector {
 
   get knockCount(): number {
     return this.knockSpectra.length;
+  }
+
+  /** Samples ingested so far. A grocery press is stamped on this clock. */
+  get clockSamples(): number {
+    return this.totalSamples;
   }
 
   get spectra(): Float32Array[] {
@@ -243,17 +263,25 @@ export class KnockDetector {
    * same window that makes auto detection ignore follow-up spikes, so it is
    * not a second knock. A press is stale only against the last auto-detected
    * spike that was not stored, once that sound is older than one knock window.
+   * Debounce and that stale rule use the press stamp, not the later read.
+   * Pass the sample-clock stamp from the click. After the capture block has
+   * had time to arrive, the read then spans KNOCK_WINDOW_MS before that stamp
+   * through MANUAL_PRESS_SETTLE_MS after it, and the stored spectrum is the
+   * knock-shaped peak inside that span. Without a stamp, the read is the
+   * latest knock window at the current clock.
    * A quiet window is a weak tap. A loud window still has to show a knock
    * attack and decay; steady noise does not. A failure after a knock is
    * already stored does not reject those knocks.
    */
-  captureManualKnock(): boolean {
+  captureManualKnock(pressAtSample?: number): boolean {
     if (this.knockSpectra.length >= this.maxKnocks) return false;
-    const nowMs = this.currentTimeMs();
-    if (nowMs - this.lastKnockAtMs < KNOCK_DEBOUNCE_MS) return false;
-    if (this.manualPressIsStale(nowMs)) return false;
+    const stamped = pressAtSample !== undefined;
+    const pressSample = pressAtSample ?? this.totalSamples;
+    const pressMs = this.samplesToMs(pressSample);
+    if (pressMs - this.lastKnockAtMs < KNOCK_DEBOUNCE_MS) return false;
+    if (this.manualPressIsStale(pressMs)) return false;
     this.lastRejection = null;
-    const captured = this.readKnockPcm();
+    const captured = stamped ? this.readManualPressWindow(pressSample) : this.readKnockPcm();
     if (!captured || frameIsClipped(captured)) {
       if (this.knockSpectra.length === 0) this.lastRejection = 'noisy';
       return false;
@@ -261,20 +289,22 @@ export class KnockDetector {
     const quality = classifyTapPcm(captured, this.noiseFloor);
     if (!quality.ok && quality.reason === 'low_peak') {
       if (this.knockSpectra.length > 0) return false;
-      this.lastKnockAtMs = nowMs;
+      this.lastKnockAtMs = pressMs;
       this.lastRejection = 'low_peak';
       return false;
     }
-    if (!windowHasKnockShape(captured)) {
+    const peakBlock = locateKnockShape(captured);
+    if (peakBlock === null) {
       if (this.knockSpectra.length > 0) return false;
-      this.lastKnockAtMs = nowMs;
+      this.lastKnockAtMs = pressMs;
       this.lastRejection = 'noisy';
       return false;
     }
-    this.lastKnockAtMs = nowMs;
-    this.lastCountedKnockAtMs = nowMs;
+    const toStore = stamped ? this.sliceAroundKnock(captured, peakBlock) : captured;
+    this.lastKnockAtMs = pressMs;
+    this.lastCountedKnockAtMs = pressMs;
     this.lastUncountedSoundAtMs = Number.NEGATIVE_INFINITY;
-    this.knockSpectra.push(fftMagnitudes(applyHann(captured)));
+    this.knockSpectra.push(fftMagnitudes(applyHann(toStore)));
     return true;
   }
 
@@ -290,7 +320,11 @@ export class KnockDetector {
   }
 
   private currentTimeMs(): number {
-    return (this.totalSamples / this.sampleRate) * 1000;
+    return this.samplesToMs(this.totalSamples);
+  }
+
+  private samplesToMs(samples: number): number {
+    return (samples / this.sampleRate) * 1000;
   }
 
   private updateNoiseFloor(frameRms: number, wasLoud: boolean): void {
@@ -322,6 +356,56 @@ export class KnockDetector {
     const minSamples = Math.min(windowSamples, Math.max(prerollSamples + 256, FRAME_SIZE / 2));
     if (this.samplesWritten < minSamples) return null;
     return this.readLatest(Math.min(windowSamples, this.samplesWritten));
+  }
+
+  /**
+   * From about one knock window before the press stamp to one settle after it.
+   * The end is clipped to audio already in the ring.
+   */
+  private readManualPressWindow(pressAtSample: number): Float32Array | null {
+    const settleSamples = Math.round((MANUAL_PRESS_SETTLE_MS / 1000) * this.sampleRate);
+    const spanSamples = Math.round(((KNOCK_WINDOW_MS + MANUAL_PRESS_SETTLE_MS) / 1000) * this.sampleRate);
+    const end = pressAtSample + settleSamples;
+    return this.readSampleRange(end - spanSamples, end);
+  }
+
+  /** KNOCK_WINDOW_MS centered on the chosen attack, clipped to `pcm`. */
+  private sliceAroundKnock(pcm: Float32Array, peakBlock: number): Float32Array {
+    const block = MANUAL_KNOCK_BLOCK_HOPS * HOP_SIZE;
+    const windowSamples = Math.round((KNOCK_WINDOW_MS / 1000) * this.sampleRate);
+    const peakCenter = peakBlock * block + Math.floor(block / 2);
+    let start = peakCenter - Math.floor(windowSamples / 2);
+    let end = start + windowSamples;
+    if (start < 0) {
+      end -= start;
+      start = 0;
+    }
+    if (end > pcm.length) {
+      start -= end - pcm.length;
+      end = pcm.length;
+    }
+    if (start < 0) start = 0;
+    return pcm.subarray(start, end);
+  }
+
+  /** Half-open sample-clock range [startSample, endSample), clipped to the ring. */
+  private readSampleRange(startSample: number, endSample: number): Float32Array | null {
+    const windowSamples = Math.round((KNOCK_WINDOW_MS / 1000) * this.sampleRate);
+    const prerollSamples = Math.round((KNOCK_PREROLL_MS / 1000) * this.sampleRate);
+    const minSamples = Math.min(windowSamples, Math.max(prerollSamples + 256, FRAME_SIZE / 2));
+    const availableStart = this.totalSamples - this.samplesWritten;
+    const start = Math.max(startSample, availableStart, 0);
+    const end = Math.min(endSample, this.totalSamples);
+    if (end - start < minSamples) return null;
+    const n = end - start;
+    const out = new Float32Array(n);
+    let idx = this.writeIndex - (this.totalSamples - start);
+    idx %= this.ring.length;
+    if (idx < 0) idx += this.ring.length;
+    for (let i = 0; i < n; i += 1) {
+      out[i] = this.ring[(idx + i) % this.ring.length];
+    }
+    return out;
   }
 
   private captureKnockSpectrum(): Float32Array | null {

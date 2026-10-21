@@ -95,12 +95,12 @@ function shopRun(
 }
 
 /**
- * ScriptProcessor publishes 2048-sample blocks. At the read, only blocks that
- * have ended are in the ring; the in-progress block is withheld. settleMs is
- * how long after the press that read runs. A 40 ms press with settle 0 is the
- * browser miss: the knock still overlaps the open block, so the shape check
- * sees noise. MANUAL_PRESS_SETTLE_MS lets that block arrive and still leaves
- * the knock inside the 200 ms window.
+ * ScriptProcessor publishes 2048-sample blocks. At acoustic time t, only blocks
+ * that have ended are in the ring. `heldBlocks` completed blocks stay held as
+ * well: the browser graph often keeps more than the one open block, which is
+ * the latency a 120 ms settle is there to absorb.
+ * The press is stamped on the sample clock at the click, then the read runs
+ * after settleMs. Each stored press must add exactly one knock.
  */
 function shopRunBuffered(
   seed: number,
@@ -108,15 +108,21 @@ function shopRunBuffered(
   pressAfterS: number,
   settleMs: number,
   noiseRms = NOISE_RMS,
-): { ok: boolean; knockCount: number; aborted: boolean } {
+  heldBlocks = 0,
+): { ok: boolean; knockCount: number; aborted: boolean; singles: boolean } {
   const { pcm, presses } = shopPcm(seed, knockRms, noiseRms, pressAfterS);
   const settleSamples = Math.round((settleMs / 1000) * SAMPLE_RATE);
+  const hold = heldBlocks * FRAME_SIZE;
   const detector = new KnockDetector(SAMPLE_RATE);
   let offset = 0;
   let aborted = false;
+  let singles = true;
+  const deliveredAt = (acoustic: number) =>
+    Math.max(0, Math.floor(acoustic / FRAME_SIZE) * FRAME_SIZE - hold);
+
   for (const press of presses) {
-    const delivered = Math.floor((press + settleSamples) / FRAME_SIZE) * FRAME_SIZE;
-    while (offset + FRAME_SIZE <= delivered && offset + FRAME_SIZE <= pcm.length) {
+    const atPress = deliveredAt(press);
+    while (offset + FRAME_SIZE <= atPress && offset + FRAME_SIZE <= pcm.length) {
       detector.pushFrame(pcm.subarray(offset, offset + FRAME_SIZE));
       offset += FRAME_SIZE;
       if (detector.lastRejection) {
@@ -125,7 +131,20 @@ function shopRunBuffered(
       }
     }
     if (aborted) break;
-    detector.captureManualKnock();
+    const pressAtSample = detector.clockSamples;
+    const atRead = deliveredAt(press + settleSamples);
+    while (offset + FRAME_SIZE <= atRead && offset + FRAME_SIZE <= pcm.length) {
+      detector.pushFrame(pcm.subarray(offset, offset + FRAME_SIZE));
+      offset += FRAME_SIZE;
+      if (detector.lastRejection) {
+        aborted = true;
+        break;
+      }
+    }
+    if (aborted) break;
+    const before = detector.knockCount;
+    detector.captureManualKnock(pressAtSample);
+    if (detector.knockCount !== before + 1) singles = false;
     if (detector.lastRejection) {
       aborted = true;
       break;
@@ -133,9 +152,10 @@ function shopRunBuffered(
     if (detector.knockCount >= 3) break;
   }
   return {
-    ok: !aborted && detector.knockCount >= 3,
+    ok: !aborted && detector.knockCount >= 3 && singles,
     knockCount: detector.knockCount,
     aborted,
+    singles,
   };
 }
 
@@ -176,5 +196,27 @@ describe('loud shop knocks', () => {
     );
     expect(quiet.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
     expect(loud.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
+  });
+
+  // One held block plus the open block (~93 ms). A single open block lags the
+  // stamp by only ~46 ms, which leaves a knock 250 ms before the acoustic press
+  // just outside the 200 ms lookback. The extra held block is the latency that
+  // still reached a result on ae7ebdf5 at these offsets.
+  it.each([40, 150, 200, 250])(
+    'stores each knock once when the press is %s ms later in 0.2 RMS noise',
+    (offsetMs) => {
+      const runs = Array.from({ length: 8 }, (_, i) =>
+        shopRunBuffered(i + 1, 0.2, offsetMs / 1000, MANUAL_PRESS_SETTLE_MS, 0.2, 1),
+      );
+      expect(runs.map((run) => run.ok)).toEqual([true, true, true, true, true, true, true, true]);
+      expect(runs.every((run) => run.knockCount === 3 && run.singles && !run.aborted)).toBe(true);
+    },
+  );
+
+  it('stores nothing for no-knock noise at 0.2 RMS when the read waits', () => {
+    const runs = Array.from({ length: 8 }, (_, i) =>
+      shopRunBuffered(i + 1, 0, 0.15, MANUAL_PRESS_SETTLE_MS, 0.2, 1),
+    );
+    expect(runs.every((run) => run.knockCount === 0 && !run.ok)).toBe(true);
   });
 });

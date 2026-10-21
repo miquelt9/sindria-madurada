@@ -12,15 +12,13 @@ const SAMPLE_RATE = 44100;
 const NOISE_RMS = 0.03;
 
 /**
- * The read waits MANUAL_PRESS_SETTLE_MS (120) after the press.
- * The window is still 200 ms, so a knock up to about 80 ms after the press
- * is inside it, and a knock just before the press is too.
- * A press 40 ms before the knock is stored.
- * A press 180 ms before the knock is not: after the wait the ring still ends
- * before that knock.
+ * The click is stamped on the sample clock. The read waits
+ * MANUAL_PRESS_SETTLE_MS (120), then covers about 200 ms before that stamp
+ * through 120 ms after it. A press 40 ms before the knock is stored. A press
+ * 180 ms before the knock is not: the knock falls after the window.
  * A second press while the wait is running is ignored. It does not push the timer.
- * If the open block flushes an auto-counted knock during the wait, the delayed
- * read is inside the 400 ms debounce and does not count a second knock.
+ * If the open block flushes an auto-counted knock during the wait, debounce
+ * uses the earlier stamp and does not count a second knock.
  */
 
 function mulberry32(seed: number): () => number {
@@ -39,13 +37,13 @@ function msToSamples(ms: number): number {
 }
 
 /** Shop noise plus one 20 ms knock. The knock starts on a 2048-sample boundary. */
-function frameAlignedKnock(seed: number): { pcm: Float32Array; knockAt: number } {
+function frameAlignedKnock(seed: number, noiseRms = NOISE_RMS): { pcm: Float32Array; knockAt: number } {
   const knockAt = 20 * FRAME_SIZE;
-  const n = knockAt + msToSamples(400);
+  const n = knockAt + msToSamples(500);
   const pcm = new Float32Array(n);
   const rand = mulberry32(seed);
   for (let i = 0; i < n; i += 1) {
-    pcm[i] = NOISE_RMS * (rand() * 2 - 1) * Math.sqrt(3);
+    pcm[i] = noiseRms * (rand() * 2 - 1) * Math.sqrt(3);
   }
   const knockLen = Math.floor(0.02 * SAMPLE_RATE);
   const burst = new Float32Array(knockLen);
@@ -55,7 +53,7 @@ function frameAlignedKnock(seed: number): { pcm: Float32Array; knockAt: number }
     burst[i] = Math.sin((2 * Math.PI * 160 * i) / SAMPLE_RATE) * hann;
     sumSq += burst[i] * burst[i];
   }
-  const scale = NOISE_RMS / Math.sqrt(sumSq / knockLen);
+  const scale = noiseRms / Math.sqrt(sumSq / knockLen);
   for (let i = 0; i < knockLen; i += 1) pcm[knockAt + i] += burst[i] * scale;
   return { pcm, knockAt };
 }
@@ -205,6 +203,37 @@ describe('grocery press waits for the capture buffer', () => {
     expect(detector.lastRejection).toBeNull();
     expect(knocks).toEqual([1]);
   });
+
+  it.each([40, 150, 200, 250])(
+    'stores a press %s ms after the knock once the held capture blocks arrive',
+    (offsetMs) => {
+      const { pcm, knockAt } = frameAlignedKnock(1, 0.2);
+      const pressAt = knockAt + msToSamples(offsetMs);
+      const { recorder, detector } = listeningRecorder();
+      const knocks: number[] = [];
+      recorder.onKnockDetected = (count) => knocks.push(count);
+      // The open 2048-sample block, plus one completed block the graph still holds.
+      const held = FRAME_SIZE;
+      let offset = 0;
+      const pump = (acoustic: number) => {
+        const end = Math.max(0, Math.floor(acoustic / FRAME_SIZE) * FRAME_SIZE - held);
+        while (offset + FRAME_SIZE <= end && offset + FRAME_SIZE <= pcm.length) {
+          detector.pushFrame(pcm.subarray(offset, offset + FRAME_SIZE));
+          offset += FRAME_SIZE;
+        }
+      };
+
+      pump(pressAt);
+      expect(detector.knockCount).toBe(0);
+      expect(recorder.captureManualKnock()).toBe(false);
+      pump(pressAt + msToSamples(MANUAL_PRESS_SETTLE_MS));
+      vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
+
+      expect(detector.knockCount).toBe(1);
+      expect(knocks).toEqual([1]);
+      expect(detector.lastRejection).toBeNull();
+    },
+  );
 
   it('drops a pending press when the session stops', () => {
     const { recorder, detector } = listeningRecorder();
