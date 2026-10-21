@@ -180,8 +180,9 @@ export class KnockDetector {
    * same window that makes auto detection ignore follow-up spikes, so it is
    * not a second knock. A press is stale only against the last auto-detected
    * spike that was not stored, once that sound is older than one knock window.
-   * A window that fails after a knock is already stored is ignored, so it
-   * does not reject those knocks.
+   * A quiet or clipped window is a weak tap. Steady shop noise flattens the
+   * spike ratio of a real knock, so a loud window is stored anyway. A failure
+   * after a knock is already stored does not reject those knocks.
    */
   captureManualKnock(): boolean {
     if (this.knockSpectra.length >= this.maxKnocks) return false;
@@ -190,15 +191,15 @@ export class KnockDetector {
     if (this.manualPressIsStale(nowMs)) return false;
     this.lastRejection = null;
     const captured = this.readKnockPcm();
-    if (!captured) {
+    if (!captured || frameIsClipped(captured)) {
       if (this.knockSpectra.length === 0) this.lastRejection = 'noisy';
       return false;
     }
     const quality = classifyTapPcm(captured, this.noiseFloor);
-    if (!quality.ok) {
+    if (!quality.ok && quality.reason === 'low_peak') {
       if (this.knockSpectra.length > 0) return false;
       this.lastKnockAtMs = nowMs;
-      this.lastRejection = quality.reason;
+      this.lastRejection = 'low_peak';
       return false;
     }
     this.lastKnockAtMs = nowMs;
