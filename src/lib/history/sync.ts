@@ -49,15 +49,8 @@ type QueueItem =
   | { kind: 'feedback'; id: string; payload: FeedbackSyncPayload; attempts: number };
 
 let flushInFlight: Promise<void> | null = null;
+let appendedDuringFlush = 0;
 let listenersBound = false;
-
-declare global {
-  interface ImportMeta {
-    readonly env: {
-      readonly VITE_API_URL?: string;
-    };
-  }
-}
 
 function getApiUrl(): string {
   // Direct access so Vite inlines the value and Vitest's env stub can see it.
@@ -121,7 +114,21 @@ function persistQueue(queue: QueueItem[]): void {
 function enqueue(item: QueueItem): void {
   const queue = loadQueue();
   queue.push(item);
+  if (flushInFlight) {
+    appendedDuringFlush += 1;
+  }
   persistQueue(queue.slice(-MAX_QUEUE_ITEMS));
+}
+
+function sameQueueItem(a: QueueItem | null, b: QueueItem | null): boolean {
+  const left = a as { kind?: string; id?: string; payload?: { id?: string } } | null;
+  const right = b as { kind?: string; id?: string; payload?: { id?: string } } | null;
+  if (left?.kind !== right?.kind) {
+    return false;
+  }
+  const id = left?.kind === 'scan' ? left?.payload?.id : left?.id;
+  const otherId = right?.kind === 'scan' ? right?.payload?.id : right?.id;
+  return id === otherId;
 }
 
 function eatWindowFrom(scan: MelonScanRecord): EatWindow {
@@ -163,10 +170,23 @@ function dropClientError(status: number): boolean {
 }
 
 async function sendItem(item: QueueItem): Promise<'ok' | 'drop' | 'retry'> {
-  const base = getApiUrl();
-  const url =
-    item.kind === 'scan' ? `${base}/scans` : `${base}/scans/${encodeURIComponent(item.id)}/feedback`;
-  const method = item.kind === 'scan' ? 'POST' : 'PATCH';
+  let url: string;
+  let method: string;
+  try {
+    if (!item || (item.kind !== 'scan' && item.kind !== 'feedback')) {
+      return 'drop';
+    }
+    if (item.kind === 'feedback' && (typeof item.id !== 'string' || item.id.length === 0)) {
+      return 'drop';
+    }
+    const base = getApiUrl();
+    url =
+      item.kind === 'scan' ? `${base}/scans` : `${base}/scans/${encodeURIComponent(item.id)}/feedback`;
+    method = item.kind === 'scan' ? 'POST' : 'PATCH';
+  } catch {
+    return 'drop';
+  }
+
   try {
     const response = await fetch(url, {
       method,
@@ -192,29 +212,64 @@ export async function flushSyncQueue(): Promise<void> {
   if (flushInFlight) {
     return flushInFlight;
   }
-  flushInFlight = (async () => {
-    const queue = loadQueue();
-    const remaining: QueueItem[] = [];
-    for (let i = 0; i < queue.length; i += 1) {
-      const item = queue[i];
-      const outcome = await sendItem(item);
-      if (outcome === 'ok' || outcome === 'drop') {
-        continue;
-      }
-      const attempts = (item.attempts ?? 0) + 1;
-      if (attempts < MAX_ATTEMPTS) {
-        remaining.push({ ...item, attempts });
-        remaining.push(...queue.slice(i + 1));
-      } else {
-        remaining.push(...queue.slice(i + 1));
-      }
-      break;
-    }
-    persistQueue(remaining);
-  })().finally(() => {
+  appendedDuringFlush = 0;
+  let resolveFlush: () => void = () => {};
+  let rejectFlush: (reason: unknown) => void = () => {};
+  // Assigned before any send so an enqueue inside fetch joins this flush
+  // instead of starting a second one.
+  flushInFlight = new Promise<void>((resolve, reject) => {
+    resolveFlush = resolve;
+    rejectFlush = reject;
+  }).finally(() => {
     flushInFlight = null;
   });
-  return flushInFlight;
+  const inFlight = flushInFlight;
+  void (async () => {
+    try {
+      const queue = loadQueue() as Array<QueueItem | null>;
+      const handled: Array<{ index: number; original: QueueItem | null; replacement: QueueItem | null }> = [];
+      for (let i = 0; i < queue.length; i += 1) {
+        const item = queue[i];
+        const outcome = await sendItem(item as QueueItem);
+        if (!item || outcome === 'ok' || outcome === 'drop') {
+          handled.push({ index: i, original: item, replacement: null });
+          continue;
+        }
+        const attempts = (item.attempts ?? 0) + 1;
+        if (attempts < MAX_ATTEMPTS) {
+          handled.push({ index: i, original: item, replacement: { ...item, attempts } });
+        } else {
+          handled.push({ index: i, original: item, replacement: null });
+        }
+        break;
+      }
+      // Rewrite from the queue as it is now so an enqueue during sendItem is kept.
+      // Appends can also trim the sent original off the front. That slot is gone,
+      // so a newer entry with the same kind and id must stay unsent.
+      const next = loadQueue() as Array<QueueItem | null>;
+      const dropped = Math.max(0, queue.length + appendedDuringFlush - MAX_QUEUE_ITEMS);
+      for (let n = handled.length - 1; n >= 0; n -= 1) {
+        const action = handled[n];
+        if (action.index < dropped) {
+          continue;
+        }
+        const index = action.index - dropped;
+        if (!sameQueueItem(next[index] ?? null, action.original)) {
+          continue;
+        }
+        if (action.replacement === null) {
+          next.splice(index, 1);
+        } else {
+          next[index] = action.replacement;
+        }
+      }
+      persistQueue(next as QueueItem[]);
+      resolveFlush();
+    } catch (error) {
+      rejectFlush(error);
+    }
+  })();
+  return inFlight;
 }
 
 function bindFlushListeners(): void {
