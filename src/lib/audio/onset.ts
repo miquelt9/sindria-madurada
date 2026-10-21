@@ -258,8 +258,6 @@ export class KnockDetector {
       this.lastKnockAtMs = nowMs;
       if (this.knockSpectra.length === 0) this.lastRejection = 'low_peak';
       return false;
-    } else if (isSpike) {
-      this.noteUncountedSound(nowMs);
     }
 
     this.updateNoiseFloor(stats.frameRms, isLoud);
@@ -270,27 +268,25 @@ export class KnockDetector {
    * Grocery fallback. A press inside the debounce of the last knock is the
    * same window that makes auto detection ignore follow-up spikes, so it is
    * not a second knock. A press is stale only against the last auto-detected
-   * spike that was not stored, once that sound is older than one knock window.
+   * spike that was not stored, once that sound is older than one knock window
+   * and still inside the debounce. After the debounce the flag expires.
    * Debounce and that stale rule use the press stamp, not the later read.
    * Pass the sample-clock stamp from the click. The caller waits until the
    * audio clock reaches that stamp plus MANUAL_PRESS_SETTLE_MS (or the wall
    * cap) and then reads. The read starts KNOCK_WINDOW_MS before the stamp
    * and ends at the newest sample in the ring. The stored spectrum is the
-   * knock-shaped peak inside that span. Without a stamp, the read is the
-   * latest knock window at the current clock.
+   * knock-shaped peak inside that span.
    * A quiet window is a weak tap. A loud window still has to show a knock
    * attack and decay; steady noise does not. A failure after a knock is
    * already stored does not reject those knocks.
    */
-  captureManualKnock(pressAtSample?: number): boolean {
+  captureManualKnock(pressAtSample: number): boolean {
     if (this.knockSpectra.length >= this.maxKnocks) return false;
-    const stamped = pressAtSample !== undefined;
-    const pressSample = pressAtSample ?? this.totalSamples;
-    const pressMs = this.samplesToMs(pressSample);
+    const pressMs = this.samplesToMs(pressAtSample);
     if (pressMs - this.lastKnockAtMs < KNOCK_DEBOUNCE_MS) return false;
     if (this.manualPressIsStale(pressMs)) return false;
     this.lastRejection = null;
-    const captured = stamped ? this.readManualPressWindow(pressSample) : this.readKnockPcm();
+    const captured = this.readManualPressWindow(pressAtSample);
     if (!captured || frameIsClipped(captured)) {
       if (this.knockSpectra.length === 0) this.lastRejection = 'noisy';
       return false;
@@ -309,7 +305,7 @@ export class KnockDetector {
       this.lastRejection = 'noisy';
       return false;
     }
-    const toStore = stamped ? this.sliceAroundKnock(captured, peakBlock) : captured;
+    const toStore = this.sliceAroundKnock(captured, peakBlock);
     this.lastKnockAtMs = pressMs;
     this.lastCountedKnockAtMs = pressMs;
     this.lastUncountedSoundAtMs = Number.NEGATIVE_INFINITY;
@@ -317,11 +313,16 @@ export class KnockDetector {
     return true;
   }
 
-  /** An uncounted auto spike older than the knock window. A counted knock is not a reference. */
+  /**
+   * An uncounted auto spike that is already outside the knock window and
+   * still inside the debounce. A counted knock is not a reference. Older
+   * than the debounce, the flag expires so a later press can count.
+   */
   private manualPressIsStale(nowMs: number): boolean {
     if (this.lastUncountedSoundAtMs === Number.NEGATIVE_INFINITY) return false;
     if (this.lastCountedKnockAtMs >= this.lastUncountedSoundAtMs) return false;
-    return nowMs - this.lastUncountedSoundAtMs > KNOCK_WINDOW_MS;
+    const age = nowMs - this.lastUncountedSoundAtMs;
+    return age > KNOCK_WINDOW_MS && age <= KNOCK_DEBOUNCE_MS;
   }
 
   private noteUncountedSound(nowMs: number): void {
@@ -381,7 +382,11 @@ export class KnockDetector {
     return this.readSampleRange(start, this.totalSamples);
   }
 
-  /** KNOCK_WINDOW_MS centered on the chosen attack, clipped to `pcm`. */
+  /**
+   * KNOCK_WINDOW_MS centered on the chosen attack, clipped to `pcm`.
+   * A manual press stores this centred span. An auto knock keeps the latest
+   * window, so that knock sits nearer the tail. Level is not a score.
+   */
   private sliceAroundKnock(pcm: Float32Array, peakBlock: number): Float32Array {
     const block = MANUAL_KNOCK_BLOCK_HOPS * HOP_SIZE;
     const windowSamples = Math.round((KNOCK_WINDOW_MS / 1000) * this.sampleRate);

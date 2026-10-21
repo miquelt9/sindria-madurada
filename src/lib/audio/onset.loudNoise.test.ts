@@ -59,7 +59,8 @@ function shopPcm(
 /**
  * Pushes each full frame as soon as the loop reaches it, including samples
  * after the press in that frame. A lastRejection aborts the session the way
- * KnockRecorder does. A grocery press follows each knock by 150 ms.
+ * KnockRecorder does. A grocery press follows each knock by 150 ms and is
+ * stamped on the sample clock once that frame has arrived.
  */
 function shopRun(
   seed: number,
@@ -78,7 +79,7 @@ function shopRun(
     }
     const end = offset + FRAME_SIZE;
     while (pi < presses.length && presses[pi] < end) {
-      detector.captureManualKnock();
+      detector.captureManualKnock(detector.clockSamples);
       if (detector.lastRejection) {
         aborted = true;
         break;

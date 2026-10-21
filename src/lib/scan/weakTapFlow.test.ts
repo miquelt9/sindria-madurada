@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { VisualFeatures } from '../types';
 import { backFromKnock } from './backFromKnock';
 import {
   noteGoodTap,
@@ -10,6 +11,14 @@ import {
   WeakTapState,
 } from './weakTapFlow';
 
+const keptVisual: VisualFeatures = {
+  stripeContrastScore: 0.4,
+  groundSpotScore: 0.5,
+  dullnessScore: 0.5,
+  groundSpotDetected: true,
+  notes: ['kept'],
+};
+
 function draft(overrides: Partial<WeakTapState> = {}): WeakTapState {
   return {
     step: 'knock',
@@ -20,7 +29,7 @@ function draft(overrides: Partial<WeakTapState> = {}): WeakTapState {
     bellyPhotoUrl: 'data:image/jpeg;base64,BELLY',
     variety: 'solid',
     size: 'large',
-    visualFeatures: { notes: ['kept'] },
+    visualFeatures: keptVisual,
     framing: { rindImage: 'data:image/jpeg;base64,RIND' },
     currentResult: null,
     currentScanId: null,
@@ -95,7 +104,7 @@ describe('weak tap counter', () => {
   });
 
   it('retry keeps the photo and opens a fresh knock session', () => {
-    const visual = { notes: ['kept'] };
+    const visual: VisualFeatures = { ...keptVisual, notes: ['kept'] };
     const state = draft({ visualFeatures: visual, knockSession: 2, weakTapCount: 3 });
     const next = retryKnockCapture(recordWeakTap(state));
     expect(next.step).toBe('knock');

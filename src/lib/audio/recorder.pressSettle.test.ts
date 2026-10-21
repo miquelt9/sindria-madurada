@@ -146,7 +146,7 @@ describe('grocery press waits for the capture buffer', () => {
 
     const immediate = new KnockDetector(SAMPLE_RATE);
     deliverThrough(immediate, pcm, pressAt);
-    expect(immediate.captureManualKnock()).toBe(false);
+    expect(immediate.captureManualKnock(immediate.clockSamples)).toBe(false);
     expect(immediate.knockCount).toBe(0);
     expect(immediate.lastRejection).toBe('noisy');
 
@@ -158,13 +158,13 @@ describe('grocery press waits for the capture buffer', () => {
 
     const offset = deliverThrough(detector, pcm, pressAt);
     const stamp = detector.clockSamples;
-    expect(recorder.captureManualKnock()).toBe(false);
+    recorder.captureManualKnock();
     expect(recorder.manualPressPending).toBe(true);
     expect(detector.knockCount).toBe(0);
     expect(detector.lastRejection).toBeNull();
 
     vi.advanceTimersByTime(50);
-    expect(recorder.captureManualKnock()).toBe(false);
+    recorder.captureManualKnock();
     expect(recorder.manualPressPending).toBe(true);
 
     // Wall time past the old 120 ms timer, but the later batch is still held.
@@ -193,7 +193,7 @@ describe('grocery press waits for the capture buffer', () => {
     const earlyPress = earlyPcm.knockAt - msToSamples(40);
     const earlyOffset = deliverThrough(early.detector, earlyPcm.pcm, earlyPress);
     const earlyStamp = early.detector.clockSamples;
-    expect(early.recorder.captureManualKnock()).toBe(false);
+    early.recorder.captureManualKnock();
     vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
     expect(early.recorder.manualPressPending).toBe(true);
     expect(early.detector.knockCount).toBe(0);
@@ -217,7 +217,7 @@ describe('grocery press waits for the capture buffer', () => {
     const latePress = latePcm.knockAt - msToSamples(180);
     const lateOffset = deliverThrough(late.detector, latePcm.pcm, latePress);
     const lateStamp = late.detector.clockSamples;
-    expect(late.recorder.captureManualKnock()).toBe(false);
+    late.recorder.captureManualKnock();
     vi.advanceTimersByTime(MANUAL_PRESS_SETTLE_MS);
     expect(late.recorder.manualPressPending).toBe(true);
     releaseUntilReady(
@@ -252,7 +252,7 @@ describe('grocery press waits for the capture buffer', () => {
       expect(lag).toBeGreaterThan(0);
       expect(lag).toBeLessThanOrEqual(FRAME_SIZE);
 
-      expect(recorder.captureManualKnock()).toBe(false);
+      recorder.captureManualKnock();
       expect(detector.clockSamples).toBe(pressAtSample);
       expect(detector.knockCount).toBe(0);
 
@@ -299,7 +299,7 @@ describe('grocery press waits for the capture buffer', () => {
       expect(detector.clockSamples).toBe(stamp);
       expect(knockAt - stamp).toBe(msToSamples(pastMs));
 
-      expect(recorder.captureManualKnock()).toBe(false);
+      recorder.captureManualKnock();
       expect(recorder.manualPressPending).toBe(true);
       expect(detector.knockCount).toBe(0);
 
@@ -340,7 +340,7 @@ describe('grocery press waits for the capture buffer', () => {
       expect(detector.pushFrame(silence())).toBe(false);
     }
 
-    expect(recorder.captureManualKnock()).toBe(false);
+    recorder.captureManualKnock();
     expect(recorder.manualPressPending).toBe(true);
 
     const spike = silence();
@@ -377,7 +377,7 @@ describe('grocery press waits for the capture buffer', () => {
 
       pump(pressAt);
       expect(detector.knockCount).toBe(0);
-      expect(recorder.captureManualKnock()).toBe(false);
+      recorder.captureManualKnock();
       pump(pressAt + msToSamples(MANUAL_PRESS_SETTLE_MS));
       vi.advanceTimersByTime(MANUAL_PRESS_WALL_CAP_MS);
 
@@ -386,6 +386,36 @@ describe('grocery press waits for the capture buffer', () => {
       expect(detector.lastRejection).toBeNull();
     },
   );
+
+  it('asks for another tap and does not score when audio stays stalled through the wall cap', () => {
+    const { recorder, detector } = listeningRecorder();
+    const knocks: number[] = [];
+    const weaks: string[] = [];
+    recorder.onKnockDetected = (count) => knocks.push(count);
+    recorder.onWeakTap = (reason) => weaks.push(reason);
+
+    const pcm = new Float32Array(12 * FRAME_SIZE);
+    const rand = mulberry32(1);
+    for (let i = 0; i < pcm.length; i += 1) {
+      pcm[i] = 0.03 * (rand() * 2 - 1) * Math.sqrt(3);
+    }
+    deliverThrough(detector, pcm, 8 * FRAME_SIZE);
+    recorder.captureManualKnock();
+    expect(recorder.manualPressPending).toBe(true);
+    expect(detector.knockCount).toBe(0);
+
+    vi.advanceTimersByTime(MANUAL_PRESS_WALL_CAP_MS - 1);
+    expect(recorder.manualPressPending).toBe(true);
+    expect(weaks).toEqual([]);
+    expect(knocks).toEqual([]);
+
+    vi.advanceTimersByTime(1);
+    expect(recorder.manualPressPending).toBe(false);
+    expect(detector.knockCount).toBe(0);
+    expect(detector.lastRejection).toBe('noisy');
+    expect(weaks).toEqual(['noisy']);
+    expect(knocks).toEqual([]);
+  });
 
   it('drops a pending press when the session stops', () => {
     const { recorder, detector } = listeningRecorder();
@@ -397,7 +427,7 @@ describe('grocery press waits for the capture buffer', () => {
     const { pcm, knockAt } = frameAlignedKnock(1);
     const pressAt = knockAt + msToSamples(40);
     deliverThrough(detector, pcm, pressAt);
-    expect(recorder.captureManualKnock()).toBe(false);
+    recorder.captureManualKnock();
     expect(recorder.manualPressPending).toBe(true);
 
     const features = recorder.stopAndAnalyze();

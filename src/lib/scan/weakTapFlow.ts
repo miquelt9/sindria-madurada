@@ -1,4 +1,5 @@
 import type { AppStep } from '../../components/ui/AppShell';
+import type { RipenessResult, VisualFeatures } from '../types';
 
 /** From the third weak tap on, the calmer line and the restart action appear. */
 export const WEAK_TAP_CALM_FROM = 3;
@@ -18,9 +19,9 @@ export interface WeakTapState {
   bellyPhotoUrl?: string | null;
   variety?: string;
   size?: string;
-  visualFeatures: unknown;
+  visualFeatures: VisualFeatures | null;
   framing?: unknown;
-  currentResult: unknown;
+  currentResult: RipenessResult | null;
   currentScanId: string | null;
 }
 

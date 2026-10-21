@@ -113,15 +113,15 @@ export class KnockRecorder {
    * past the stamp, which is when a knock as late as ~140 ms after the
    * stamp still has its decay in the ring. Each capture block checks, and
    * a short poll does too. If the audio has not caught up by
-   * MANUAL_PRESS_WALL_CAP_MS, the
-   * read uses whatever is already there. The window starts about 200 ms
+   * MANUAL_PRESS_WALL_CAP_MS, the read uses whatever is already there.
+   * The window starts about 200 ms
    * before the stamp and ends at the newest sample. A second press while
-   * one is waiting is ignored. Returns false until that read stores a
-   * knock; the stored knock is reported through onKnockDetected.
+   * one is waiting is ignored. The stored knock is reported through
+   * onKnockDetected.
    */
-  captureManualKnock(): boolean {
-    if (!this.isListening || !this.detector) return false;
-    if (this.pendingManual !== null) return false;
+  captureManualKnock(): void {
+    if (!this.isListening || !this.detector) return;
+    if (this.pendingManual !== null) return;
     const pressAtSample = this.detector.clockSamples;
     const settleSamples = Math.round((MANUAL_PRESS_SETTLE_MS / 1000) * this.detector.sampleRate);
     this.pendingManual = {
@@ -134,7 +134,6 @@ export class KnockRecorder {
     this.manualPressCap = setTimeout(() => {
       this.maybeFinishManualPress(true);
     }, MANUAL_PRESS_WALL_CAP_MS);
-    return false;
   }
 
   /** Drop a press that has not been read yet. Back, finish, and unmount do this. */

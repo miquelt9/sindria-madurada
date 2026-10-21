@@ -5,6 +5,7 @@ import {
   KNOCK_DEBOUNCE_MS,
   KNOCK_WINDOW_MS,
   KnockDetector,
+  WARMUP_FRAMES,
   analyzeFrame,
   detectKnocksInPcm,
 } from './onset';
@@ -201,24 +202,24 @@ describe('KnockDetector', () => {
     expect(accepts).toBe(3);
     expect(capped.knockCount).toBe(3);
     expect(capped.pushFrame(spikeFrame())).toBe(false);
-    expect(capped.captureManualKnock()).toBe(false);
+    expect(capped.captureManualKnock(capped.clockSamples)).toBe(false);
   });
 
   it('captures one manual knock after a frame of audio and then honors the debounce', () => {
     const silent = new KnockDetector(SAMPLE_RATE);
-    expect(silent.captureManualKnock()).toBe(false);
+    expect(silent.captureManualKnock(silent.clockSamples)).toBe(false);
     expect(silent.lastRejection).toBe('noisy');
 
     silent.pushFrame(new Float32Array(FRAME_SIZE));
-    expect(silent.captureManualKnock()).toBe(false);
+    expect(silent.captureManualKnock(silent.clockSamples)).toBe(false);
     expect(silent.lastRejection).toBe('low_peak');
     expect(silent.knockCount).toBe(0);
 
     const detector = new KnockDetector(SAMPLE_RATE);
     detector.pushFrame(spikeFrame());
-    expect(detector.captureManualKnock()).toBe(true);
+    expect(detector.captureManualKnock(detector.clockSamples)).toBe(true);
     expect(detector.lastRejection).toBeNull();
-    expect(detector.captureManualKnock()).toBe(false);
+    expect(detector.captureManualKnock(detector.clockSamples)).toBe(false);
     expect(detector.knockCount).toBe(1);
     expect(detector.spectra).toHaveLength(1);
   });
@@ -243,7 +244,7 @@ describe('KnockDetector', () => {
     }
     expect(detector.lastRejection).toBeNull();
 
-    expect(detector.captureManualKnock()).toBe(false);
+    expect(detector.captureManualKnock(detector.clockSamples)).toBe(false);
     expect(detector.lastRejection).toBeNull();
     expect(detector.knockCount).toBe(1);
     expect(detector.spectra).toHaveLength(1);
@@ -285,7 +286,7 @@ describe('KnockDetector', () => {
       const sinceSpike = framesAfterSpike * frameMs;
       expect(sinceKnock).toBeGreaterThanOrEqual(KNOCK_DEBOUNCE_MS);
       expect(sinceSpike).toBeLessThanOrEqual(KNOCK_WINDOW_MS);
-      expect(detector.captureManualKnock()).toBe(true);
+      expect(detector.captureManualKnock(detector.clockSamples)).toBe(true);
       expect(detector.lastRejection).toBeNull();
       expect(detector.knockCount).toBe(before + 1);
     };
@@ -296,7 +297,7 @@ describe('KnockDetector', () => {
     addManualKnock();
     expect(detector.knockCount).toBe(3);
     expect(detector.spectra).toHaveLength(3);
-    expect(detector.captureManualKnock()).toBe(false);
+    expect(detector.captureManualKnock(detector.clockSamples)).toBe(false);
     expect(detector.knockCount).toBe(3);
   });
 
@@ -323,7 +324,7 @@ describe('KnockDetector', () => {
     expect(elapsed).toBeLessThan(KNOCK_DEBOUNCE_MS);
     expect(elapsed).toBeLessThan(KNOCK_WINDOW_MS);
 
-    expect(detector.captureManualKnock()).toBe(false);
+    expect(detector.captureManualKnock(detector.clockSamples)).toBe(false);
     expect(detector.lastRejection).toBeNull();
     expect(detector.knockCount).toBe(1);
     expect(detector.spectra).toHaveLength(1);
@@ -355,7 +356,7 @@ describe('KnockDetector', () => {
     expect(sinceKnock).toBeGreaterThanOrEqual(KNOCK_DEBOUNCE_MS);
     expect(sinceSpike).toBeLessThanOrEqual(KNOCK_WINDOW_MS);
 
-    expect(detector.captureManualKnock()).toBe(true);
+    expect(detector.captureManualKnock(detector.clockSamples)).toBe(true);
     expect(detector.lastRejection).toBeNull();
     expect(detector.knockCount).toBe(2);
     expect(detector.spectra).toHaveLength(2);
@@ -429,6 +430,75 @@ describe('KnockDetector', () => {
     expect(detector.spectra).toEqual([]);
     expect(detector.noiseFloor).toBe(0.005);
     expect(detector.liveRms).toBe(0);
-    expect(detector.captureManualKnock()).toBe(false);
+    expect(detector.captureManualKnock(detector.clockSamples)).toBe(false);
+  });
+
+  it('counts two presses after an auto knock that crosses a block boundary', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
+    const silence = () => new Float32Array(FRAME_SIZE);
+    for (let i = 0; i < WARMUP_FRAMES; i += 1) {
+      expect(detector.pushFrame(silence())).toBe(false);
+    }
+
+    const overlap = 256;
+    const head = silence();
+    const tail = silence();
+    for (let i = 0; i < overlap; i += 1) {
+      head[FRAME_SIZE - overlap + i] = 0.25;
+      tail[i] = 0.25;
+    }
+    expect(detector.pushFrame(head)).toBe(true);
+    expect(detector.pushFrame(tail)).toBe(false);
+    expect(detector.knockCount).toBe(1);
+    expect(detector.lastRejection).toBeNull();
+
+    const addManualKnock = () => {
+      const before = detector.knockCount;
+      for (let i = 0; i < 5; i += 1) expect(detector.pushFrame(silence())).toBe(false);
+      expect(detector.pushFrame(spikeFrame())).toBe(false);
+      expect(detector.knockCount).toBe(before);
+      for (let i = 0; i < 3; i += 1) expect(detector.pushFrame(silence())).toBe(false);
+      const sinceSpike = 3 * frameMs;
+      expect(sinceSpike).toBeLessThanOrEqual(KNOCK_WINDOW_MS);
+      expect(detector.captureManualKnock(detector.clockSamples)).toBe(true);
+      expect(detector.lastRejection).toBeNull();
+      expect(detector.knockCount).toBe(before + 1);
+    };
+
+    addManualKnock();
+    addManualKnock();
+    expect(detector.knockCount).toBe(3);
+    expect(detector.spectra).toHaveLength(3);
+  });
+
+  it('stores a press after a clipped bang that followed a counted knock', () => {
+    const detector = new KnockDetector(SAMPLE_RATE);
+    const frameMs = (FRAME_SIZE / SAMPLE_RATE) * 1000;
+    const silence = () => new Float32Array(FRAME_SIZE);
+    for (let i = 0; i < WARMUP_FRAMES; i += 1) {
+      expect(detector.pushFrame(silence())).toBe(false);
+    }
+    expect(detector.pushFrame(spikeFrame())).toBe(true);
+    expect(detector.knockCount).toBe(1);
+
+    const gap = Math.ceil((KNOCK_DEBOUNCE_MS + 20) / frameMs);
+    for (let i = 0; i < gap; i += 1) expect(detector.pushFrame(silence())).toBe(false);
+
+    const clipped = spikeFrame();
+    clipped[0] = 1;
+    expect(detector.pushFrame(clipped)).toBe(false);
+    expect(detector.lastRejection).toBeNull();
+    expect(detector.knockCount).toBe(1);
+
+    for (let i = 0; i < 5; i += 1) expect(detector.pushFrame(silence())).toBe(false);
+    expect(detector.pushFrame(spikeFrame())).toBe(false);
+    expect(detector.knockCount).toBe(1);
+    for (let i = 0; i < 3; i += 1) expect(detector.pushFrame(silence())).toBe(false);
+
+    expect(detector.captureManualKnock(detector.clockSamples)).toBe(true);
+    expect(detector.lastRejection).toBeNull();
+    expect(detector.knockCount).toBe(2);
+    expect(detector.spectra).toHaveLength(2);
   });
 });

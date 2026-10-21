@@ -256,8 +256,7 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
     // The press is stamped now. The read waits for the capture buffer.
     // The count updates from onKnockDetected. A second press while that
     // read is waiting is ignored.
-    const captured = recorder.captureManualKnock();
-    if (captured) setKnockCount(recorder.getKnockCount());
+    recorder.captureManualKnock();
   };
 
   const micIsHearing = isRecording && liveRms > Math.max(noiseFloor * 1.15, 0.0018);
