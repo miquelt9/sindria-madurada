@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { LandingPage } from './components/LandingPage';
 import { PhotoCapture, PhotoCaptureResult, PhotoFraming } from './components/PhotoCapture';
 import { KnockRecorderView } from './components/KnockRecorderView';
+import { WeakTapRetry } from './components/WeakTapRetry';
 import { ResultCard } from './components/ResultCard';
 import { HistoryView } from './components/HistoryView';
 import { AppShell, AppStep } from './components/ui/AppShell';
@@ -9,6 +10,13 @@ import { analyzeWatermelonImage } from './lib/vision/analyzer';
 import { fuseRipenessSignals } from './lib/score/fusion';
 import { saveScanRecord, updateScanFeedback } from './lib/history/storage';
 import { backFromKnock } from './lib/scan/backFromKnock';
+import {
+  noteGoodTap,
+  noteNewPhoto,
+  recordWeakTap,
+  restartScan,
+  retryKnockCapture,
+} from './lib/scan/weakTapFlow';
 import {
   VisualFeatures,
   AudioFeatures,
@@ -21,6 +29,9 @@ import {
 
 interface FlowState {
   step: AppStep;
+  knockPhase: 'capture' | 'retry';
+  weakTapCount: number;
+  knockSession: number;
   croppedPhotoUrl: string | null;
   bellyPhotoUrl: string | null;
   variety: MelonVariety;
@@ -34,6 +45,9 @@ interface FlowState {
 function freshFlow(step: AppStep): FlowState {
   return {
     step,
+    knockPhase: 'capture',
+    weakTapCount: 0,
+    knockSession: 0,
     croppedPhotoUrl: null,
     bellyPhotoUrl: null,
     variety: 'striped',
@@ -151,6 +165,7 @@ export const App: React.FC = () => {
       ...prev,
       currentResult: result,
       currentScanId: scanId,
+      weakTapCount: 0,
     }));
 
     try {
@@ -200,7 +215,30 @@ export const App: React.FC = () => {
   const handleBackToPhoto = () => {
     if (stepRef.current !== 'knock') return;
     stepRef.current = 'photo';
-    setFlow((current) => backFromKnock(current));
+    setFlow((current) => noteNewPhoto(backFromKnock(current)));
+  };
+
+  const handleNewPhoto = () => {
+    setFlow((current) => noteNewPhoto(current));
+  };
+
+  const handleWeakTap = () => {
+    if (stepRef.current !== 'knock') return;
+    setFlow((current) => recordWeakTap(current));
+  };
+
+  const handleRetryKnock = () => {
+    if (stepRef.current !== 'knock') return;
+    setFlow((current) => retryKnockCapture(current));
+  };
+
+  const handleGoodTap = () => {
+    setFlow((current) => noteGoodTap(current));
+  };
+
+  const restartFromWeakTap = () => {
+    stepRef.current = 'home';
+    setFlow((current) => restartScan(current));
   };
 
   const {
@@ -235,15 +273,28 @@ export const App: React.FC = () => {
         <PhotoCapture
           onPhotoCropped={handlePhotoCaptured}
           onBack={navigateHome}
+          onNewPhoto={handleNewPhoto}
           initialFraming={framing}
         />
       )}
 
-      {step === 'knock' && (
+      {step === 'knock' && flow.knockPhase === 'retry' && (
+        <WeakTapRetry
+          count={flow.weakTapCount}
+          onRetry={handleRetryKnock}
+          onRestart={restartFromWeakTap}
+        />
+      )}
+
+      {step === 'knock' && flow.knockPhase === 'capture' && (
         <KnockRecorderView
+          key={flow.knockSession}
+          autoStart={flow.knockSession > 0}
           onKnockComplete={commitAssessment}
           onSkipKnock={handleSkipKnock}
           onBack={handleBackToPhoto}
+          onWeakTap={handleWeakTap}
+          onGoodTap={handleGoodTap}
         />
       )}
 

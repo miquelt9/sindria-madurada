@@ -83,6 +83,11 @@ export const es: Translations = {
   knockTapManual: 'Toca al golpear',
   knockFinishWithCount: 'Finalizar con {count} golpe{plural}',
   knockSkip: 'Omitir test acústico (solo análisis visual)',
+  weakTapTitle: 'No te he oído bien',
+  weakTapSubline: 'Dale un golpe más firme, cerca del móvil',
+  weakTapSublineCalm: 'Prueba en un sitio más tranquilo y golpea cerca del centro',
+  weakTapRetry: 'Vuelve a intentarlo',
+  weakTapRestart: 'Empieza de nuevo',
 
   // Result & Verdict
   verdictRipe: 'Probablemente madura',
