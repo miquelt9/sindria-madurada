@@ -290,6 +290,7 @@ export const App: React.FC = () => {
         <KnockRecorderView
           key={flow.knockSession}
           autoStart={flow.knockSession > 0}
+          size={flow.size}
           onKnockComplete={commitAssessment}
           onSkipKnock={handleSkipKnock}
           onBack={handleBackToPhoto}

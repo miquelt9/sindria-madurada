@@ -70,6 +70,15 @@ export const SCORE_UNCLEAR = 0.5;
 export const SCORE_TIGHT = 0.25;
 export const SCORE_MUDDY = 0.5;
 
+/**
+ * Bands for the stored lowMidRatio. They do not change the acoustic score.
+ * A low-band share is not a ripe point (Diezma hollows; Zeng's phone study).
+ */
+export const LOW_BAND_MIN_HZ = 110;
+export const LOW_BAND_MAX_HZ = 240;
+export const UPPER_BAND_MIN_HZ = 320;
+export const UPPER_BAND_MAX_HZ = 750;
+
 export type KnockHintBand = 'dull' | 'unclear' | 'tight';
 export type PeakClarity = 'clear' | 'muddy';
 

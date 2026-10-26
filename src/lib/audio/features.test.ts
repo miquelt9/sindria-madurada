@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { fuseRipenessSignals } from '../score/fusion';
+import type { VisualFeatures } from '../types';
+import { LOW_BAND_MAX_HZ, LOW_BAND_MIN_HZ, UPPER_BAND_MIN_HZ } from './knockHint';
 import { extractAbbaszadehFeatures, aggregateKnockFeatures } from './features';
 
 describe('Acoustic Feature Extraction (Abbaszadeh et al. 2013)', () => {
@@ -173,7 +176,7 @@ describe('extractAbbaszadehFeatures edges', () => {
     const boosted = clearSpectrum(160);
     for (let i = 0; i < boosted.length; i += 1) {
       const freq = i * FFT_BIN_HZ;
-      if (freq >= 110 && freq <= 240) boosted[i] *= 5;
+      if (freq >= LOW_BAND_MIN_HZ && freq <= LOW_BAND_MAX_HZ) boosted[i] *= 5;
     }
     const before = extractAbbaszadehFeatures(baseline, FFT_RATE);
     const after = extractAbbaszadehFeatures(boosted, FFT_RATE);
@@ -187,7 +190,7 @@ describe('extractAbbaszadehFeatures edges', () => {
     expect(lowFeatures.acousticRipenessScore).toBe(0.8);
 
     const highOnly = new Float32Array(1000);
-    highOnly[321] = 1;
+    highOnly[UPPER_BAND_MIN_HZ + 1] = 1;
     const highFeatures = extractAbbaszadehFeatures(highOnly, 2000);
     expect(highFeatures.lowMidRatio).toBe(0);
     expect(highFeatures.acousticRipenessScore).toBe(0.25);
@@ -288,5 +291,36 @@ describe('aggregateKnockFeatures edges', () => {
     expect(aggregate.peakFrequencyHz).toBe(160);
     expect(aggregate.acousticRipenessScore).toBe(0.8);
     expect(aggregate.notes[1]).toMatch(/dull rather than tight/i);
+  });
+
+  it('stores the same size edges fusion shows for a clear 250 Hz knock', () => {
+    const sampleRate = 2000;
+    const knock = new Float32Array(1000);
+    knock[250] = 1;
+    const picture: VisualFeatures = {
+      stripeContrastScore: 1,
+      groundSpotScore: 1,
+      dullnessScore: 1,
+      groundSpotDetected: true,
+      notes: [],
+    };
+
+    const small = aggregateKnockFeatures([knock], sampleRate, 'small');
+    const smallFused = fuseRipenessSignals(picture, small, { size: 'small' });
+    expect(small.acousticRipenessScore).toBe(0.8);
+    expect(smallFused.knockHint).toBe('dull');
+    expect(smallFused.audioScore).toBe(80);
+    expect(small.notes[1].toLowerCase()).toContain(smallFused.knockHint);
+
+    const medium = aggregateKnockFeatures([knock], sampleRate, 'medium');
+    const mediumFused = fuseRipenessSignals(picture, medium, { size: 'medium' });
+    expect(medium.acousticRipenessScore).toBe(0.5);
+    expect(mediumFused.knockHint).toBe('unclear');
+    expect(medium.notes[1].toLowerCase()).toContain(mediumFused.knockHint);
+    expect(mediumFused.audioScore).toBe(50);
+
+    const unset = aggregateKnockFeatures([knock], sampleRate);
+    expect(unset.acousticRipenessScore).toBe(medium.acousticRipenessScore);
+    expect(unset.notes[1]).toBe(medium.notes[1]);
   });
 });

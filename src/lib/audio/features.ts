@@ -1,8 +1,12 @@
-import { AudioFeatures } from '../types';
+import { AudioFeatures, MelonSize } from '../types';
 import {
   KNOCK_SEARCH_MAX_HZ,
   KNOCK_SEARCH_MIN_HZ,
+  LOW_BAND_MAX_HZ,
+  LOW_BAND_MIN_HZ,
   SECOND_PEAK_OFFSET,
+  UPPER_BAND_MAX_HZ,
+  UPPER_BAND_MIN_HZ,
   acousticScoreFor,
   bandForFrequency,
   isPeakMuddy,
@@ -64,7 +68,6 @@ export function extractAbbaszadehFeatures(
   let totalAmpForCentroid = 0;
 
   // Stored ratio only. It does not change the acoustic score.
-  // Low band 110–240 Hz, upper band 320–750 Hz.
   let lowBandEnergy = 0;
   let highBandEnergy = 0;
   const bandMags: number[] = [];
@@ -85,9 +88,9 @@ export function extractAbbaszadehFeatures(
       totalAmpForCentroid += val;
     }
 
-    if (freq >= 110 && freq <= 240) {
+    if (freq >= LOW_BAND_MIN_HZ && freq <= LOW_BAND_MAX_HZ) {
       lowBandEnergy += val * val;
-    } else if (freq >= 320 && freq <= 750) {
+    } else if (freq >= UPPER_BAND_MIN_HZ && freq <= UPPER_BAND_MAX_HZ) {
       highBandEnergy += val * val;
     }
 
@@ -164,8 +167,13 @@ export function extractAbbaszadehFeatures(
 /**
  * Multi-knock aggregator: takes up to 3 detected knocks and aggregates features.
  * Peak frequency is the median of the knocks that count, not the mean.
+ * Size uses the same edges as fusion. Unset size keeps the medium edges.
  */
-export function aggregateKnockFeatures(knocks: Float32Array[], sampleRate: number): AudioFeatures {
+export function aggregateKnockFeatures(
+  knocks: Float32Array[],
+  sampleRate: number,
+  size?: MelonSize,
+): AudioFeatures {
   if (knocks.length === 0) {
     return {
       peakFrequencyHz: 0,
@@ -208,11 +216,14 @@ export function aggregateKnockFeatures(knocks: Float32Array[], sampleRate: numbe
   const avgKurt = featureList.reduce((acc, f) => acc + f.kurtosis, 0) / featureList.length;
   const avgRatio = featureList.reduce((acc, f) => acc + f.lowMidRatio, 0) / featureList.length;
 
-  const reading = knockHint({
-    peakFrequencyHz,
-    peakClarity,
-    knockCount: knocks.length,
-  });
+  const reading = knockHint(
+    {
+      peakFrequencyHz,
+      peakClarity,
+      knockCount: knocks.length,
+    },
+    size,
+  );
 
   const notes: string[] = [];
   notes.push(`Analyzed ${knocks.length} distinct knock sample${knocks.length > 1 ? 's' : ''}`);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, MicOff, Volume2, Hand, ArrowLeft } from 'lucide-react';
 import { KnockRecorder } from '../lib/audio/recorder';
 import { WeakTapReason } from '../lib/audio/onset';
-import { AudioFeatures } from '../lib/types';
+import { AudioFeatures, MelonSize } from '../lib/types';
 import { Button, Card, ProgressDots } from './ui';
 import { useI18n } from '../i18n';
 import { cn } from '../lib/cn';
@@ -18,6 +18,8 @@ interface KnockRecorderViewProps {
   onGoodTap?: () => void;
   /** Re-acquire the mic as soon as this capture screen mounts. */
   autoStart?: boolean;
+  /** Fruit size chip. Unset keeps the medium knock edges. */
+  size?: MelonSize;
 }
 
 const FLAT_MIC_RMS = 0.0012;
@@ -30,6 +32,7 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
   onWeakTap,
   onGoodTap,
   autoStart = false,
+  size,
 }) => {
   const { t } = useI18n();
   const [isRecording, setIsRecording] = useState(false);
@@ -51,6 +54,8 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
   const flatMicTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeLockRef = useRef<any>(null);
   const peakRmsRef = useRef(0);
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
 
   onKnockCompleteRef.current = onKnockComplete;
   onWeakTapRef.current = onWeakTap;
@@ -93,7 +98,7 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
     finishingRef.current = true;
     clearTimers();
     void releaseWakeLock();
-    const features = recorder.stopAndAnalyze();
+    const features = recorder.stopAndAnalyze(sizeRef.current);
     setIsRecording(false);
     setMicHint(null);
     if (features.knockCount <= 0 && onWeakTapRef.current) {
@@ -120,7 +125,7 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
       recorder.onWeakTap = undefined;
       recorder.onVolumeUpdate = undefined;
       recorder.onSpectrumUpdate = undefined;
-      recorder.stopAndAnalyze();
+      recorder.stopAndAnalyze(sizeRef.current);
       setIsRecording(false);
       setKnockCount(0);
       setVolume(0);
@@ -156,7 +161,7 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
     if (autoStart) {
       void handleStartRef.current().finally(() => {
         if (!alive) {
-          recorder.stopAndAnalyze();
+          recorder.stopAndAnalyze(sizeRef.current);
         }
       });
     }
@@ -169,7 +174,7 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
       recorder.onWeakTap = undefined;
       recorder.onVolumeUpdate = undefined;
       recorder.onSpectrumUpdate = undefined;
-      recorder.stopAndAnalyze();
+      recorder.stopAndAnalyze(sizeRef.current);
     };
   }, [autoStart, releaseWakeLock]);
 
@@ -184,7 +189,7 @@ export const KnockRecorderView: React.FC<KnockRecorderViewProps> = ({
       recorder.onKnockDetected = undefined;
       recorder.onVolumeUpdate = undefined;
       recorder.onSpectrumUpdate = undefined;
-      recorder.stopAndAnalyze();
+      recorder.stopAndAnalyze(sizeRef.current);
     }
     setIsRecording(false);
     setKnockCount(0);
