@@ -99,8 +99,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const details = getVerdictDetails();
   const Icon = details.icon;
 
-  const firmnessLabelFor = (peakHz: number, knockCount: number) => {
-    const cue = firmnessCue(peakHz, knockCount);
+  const firmnessLabelFor = (scan: RipenessResult) => {
+    const cue = firmnessCue({
+      peakHz: scan.audioFeatures.peakFrequencyHz,
+      knockCount: scan.audioFeatures.knockCount,
+      knockHint: scan.knockHint,
+    });
     if (cue === 'dull') return t('firmnessDull');
     if (cue === 'tight') return t('firmnessTight');
     if (cue === 'unclear') return t('firmnessUnclear');
@@ -134,10 +138,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         eatWindowValue: eatLine,
         visualLabel: t('visualSignals'),
         audioLabel: t('resonantTone'),
-        firmnessLabel: firmnessLabelFor(
-          result.audioFeatures.peakFrequencyHz,
-          result.audioFeatures.knockCount
-        ),
+        firmnessLabel: firmnessLabelFor(result),
         cardSubtitle: t('appSubtitle'),
         shareNote: t('shareSummary'),
       });
@@ -298,10 +299,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 <div className="flex justify-between">
                   <span>{t('resonantTone')}:</span>
                   <span className="text-ink font-bold">
-                    {firmnessLabelFor(
-                      result.audioFeatures.peakFrequencyHz,
-                      result.audioFeatures.knockCount
-                    )}
+                    {firmnessLabelFor(result)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -336,12 +334,15 @@ export const ResultCard: React.FC<ResultCardProps> = ({
               tips.push(t('tipSpotPresent'));
             }
 
-            if (result.audioFeatures.knockCount > 0) {
-              if (result.audioFeatures.peakFrequencyHz > 250) {
-                tips.push(t('tipKnockHigh'));
-              } else if (result.audioFeatures.peakFrequencyHz >= 115 && result.audioFeatures.peakFrequencyHz <= 250) {
-                tips.push(t('tipKnockSweetZone'));
-              }
+            const knockCue = firmnessCue({
+              peakHz: result.audioFeatures.peakFrequencyHz,
+              knockCount: result.audioFeatures.knockCount,
+              knockHint: result.knockHint,
+            });
+            if (knockCue === 'tight') {
+              tips.push(t('tipKnockHigh'));
+            } else if (knockCue === 'dull') {
+              tips.push(t('tipKnockSweetZone'));
             }
 
             if (result.visualFeatures.stripeContrastScore < 0.4) {
@@ -416,10 +417,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 {result.overallScore}%
               </div>
               <div className="text-[10px] text-ink-muted font-semibold">
-                {firmnessLabelFor(
-                  result.audioFeatures.peakFrequencyHz,
-                  result.audioFeatures.knockCount
-                )}
+                {firmnessLabelFor(result)}
               </div>
             </div>
 
@@ -437,10 +435,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 {previousScan.result.overallScore}%
               </div>
               <div className="text-[10px] text-ink-muted font-semibold">
-                {firmnessLabelFor(
-                  previousScan.result.audioFeatures.peakFrequencyHz,
-                  previousScan.result.audioFeatures.knockCount
-                )}
+                {firmnessLabelFor(previousScan.result)}
               </div>
             </div>
           </div>

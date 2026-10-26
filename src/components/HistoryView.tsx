@@ -15,8 +15,12 @@ interface HistoryViewProps {
 export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
   const { t } = useI18n();
 
-  const firmnessLabelFor = (peakHz: number, knockCount: number) => {
-    const cue = firmnessCue(peakHz, knockCount);
+  const firmnessLabelFor = (scan: MelonScanRecord['result']) => {
+    const cue = firmnessCue({
+      peakHz: scan.audioFeatures.peakFrequencyHz,
+      knockCount: scan.audioFeatures.knockCount,
+      knockHint: scan.knockHint,
+    });
     if (cue === 'dull') return t('firmnessDull');
     if (cue === 'tight') return t('firmnessTight');
     if (cue === 'unclear') return t('firmnessUnclear');
@@ -208,10 +212,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onBack }) => {
               {selectedRecord.result.audioFeatures.knockCount > 0 ? (
                 <>
                   <strong>{t('resonantTone')}:</strong>{' '}
-                  {firmnessLabelFor(
-                    selectedRecord.result.audioFeatures.peakFrequencyHz,
-                    selectedRecord.result.audioFeatures.knockCount
-                  )}{' '}
+                  {firmnessLabelFor(selectedRecord.result)}{' '}
                   ({selectedRecord.result.audioFeatures.knockCount} {t('knocksRegistered').toLowerCase()})
                 </>
               ) : (

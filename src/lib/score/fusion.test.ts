@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { fuseRipenessSignals, ripePeakMaxHz } from './fusion';
+import * as fusion from './fusion';
+import { fuseRipenessSignals } from './fusion';
 import { VisualFeatures, AudioFeatures, MelonSize } from '../types';
 
 function visual(overrides: Partial<VisualFeatures> = {}): VisualFeatures {
@@ -23,6 +25,7 @@ function audio(overrides: Partial<AudioFeatures> = {}): AudioFeatures {
     kurtosis: 3.1,
     lowMidRatio: 2.2,
     knockCount: 3,
+    peakClarity: 'clear',
     acousticRipenessScore: 0.88,
     notes: [],
     ...overrides,
@@ -107,15 +110,6 @@ describe('fuseRipenessSignals', () => {
   });
 });
 
-describe('ripePeakMaxHz', () => {
-  it('widens the dull band only for a small melon', () => {
-    expect(ripePeakMaxHz('small')).toBe(250);
-    expect(ripePeakMaxHz('medium')).toBe(210);
-    expect(ripePeakMaxHz('large')).toBe(210);
-    expect(ripePeakMaxHz()).toBe(210);
-  });
-});
-
 describe('fuseRipenessSignals boundaries', () => {
   function flat(score: number, detected = true) {
     return fuseRipenessSignals(
@@ -167,13 +161,13 @@ describe('fuseRipenessSignals boundaries', () => {
   it('weights a single knock at 65/35 and pins its confidence at 65', () => {
     const fused = fuseRipenessSignals(
       visual({ stripeContrastScore: 1, groundSpotScore: 1, dullnessScore: 1 }),
-      audio({ knockCount: 1, acousticRipenessScore: 0, peakFrequencyHz: 0 }),
+      audio({ knockCount: 1, peakFrequencyHz: 350, peakClarity: 'clear' }),
     );
     expect(fused.visualScore).toBe(100);
-    expect(fused.audioScore).toBe(0);
-    expect(fused.overallScore).toBe(65);
+    expect(fused.audioScore).toBe(25);
+    expect(fused.overallScore).toBe(74);
     expect(fused.confidence).toBe(65);
-    expect(fused.verdict).toBe('borderline');
+    expect(fused.verdict).toBe('likely_ripe');
   });
 
   it('caps confidence at 92 once several knocks and a field spot are present', () => {
@@ -185,46 +179,37 @@ describe('fuseRipenessSignals boundaries', () => {
     expect(fuseRipenessSignals(visual(), audio({ knockCount: 10 })).confidence).toBe(92);
   });
 
-  it('lifts only the small-melon band between 210 and 250 Hz, and stops at 1', () => {
-    const extended = audio({ peakFrequencyHz: 250, acousticRipenessScore: 0.6, knockCount: 3 });
-    const small = fuseRipenessSignals(visual(), extended, { size: 'small' });
-    const large = fuseRipenessSignals(visual(), extended, { size: 'large' });
-    expect(small.audioScore).toBe(85);
-    expect(large.audioScore).toBe(60);
-
-    const below = fuseRipenessSignals(
-      visual(),
-      audio({ peakFrequencyHz: 210, acousticRipenessScore: 0.6, knockCount: 3 }),
-      { size: 'small' },
-    );
-    const above = fuseRipenessSignals(
-      visual(),
-      audio({ peakFrequencyHz: 251, acousticRipenessScore: 0.6, knockCount: 3 }),
-      { size: 'small' },
-    );
-    expect(below.audioScore).toBe(60);
-    expect(above.audioScore).toBe(60);
-
-    const capped = fuseRipenessSignals(
-      visual(),
-      audio({ peakFrequencyHz: 230, acousticRipenessScore: 0.9, knockCount: 3 }),
-      { size: 'small' },
-    );
-    expect(capped.audioScore).toBe(100);
+  it('T19 gives a small melon a dull hint at 250 Hz and a medium melon unclear', () => {
+    const sample = audio({ peakFrequencyHz: 250, peakClarity: 'clear', knockCount: 3 });
+    const small = fuseRipenessSignals(visual(), sample, { size: 'small' });
+    const medium = fuseRipenessSignals(visual(), sample, { size: 'medium' });
+    expect(small.knockHint).toBe('dull');
+    expect(medium.knockHint).toBe('unclear');
+    expect(small.audioScore).toBe(80);
+    expect(medium.audioScore).toBe(50);
+    const source = readFileSync(new URL('./fusion.ts', import.meta.url), 'utf8');
+    expect(source).not.toContain('SMALL_MELON_EXTENDED_BAND_LIFT');
+    expect(source).not.toContain('sizeAdjustedAcousticScore');
+    expect(source).not.toContain('ripePeakMaxHz');
   });
 
   it.each([
+    ['medium', 114, false, false],
     ['medium', 115, true, false],
-    ['medium', 210, true, false],
-    ['medium', 211, false, false],
-    ['medium', 250, false, false],
-    ['medium', 251, false, true],
-    ['small', 250, true, false],
-    ['small', 290, false, false],
-    ['small', 291, false, true],
-    ['large', 210, true, false],
-    ['large', 251, false, true],
-  ] as const)('%s peak %s Hz dull tip %s, tight tip %s', (size, peak, dull, tight) => {
+    ['medium', 230, true, false],
+    ['medium', 231, false, false],
+    ['medium', 300, false, false],
+    ['medium', 301, false, true],
+    ['small', 131, false, false],
+    ['small', 132, true, false],
+    ['small', 265, true, false],
+    ['small', 266, false, false],
+    ['small', 345, false, false],
+    ['small', 346, false, true],
+    ['large', 230, true, false],
+    ['large', 100, false, false],
+    ['large', 301, false, true],
+  ] as const)('%s peak %s dull tip %s, tight tip %s', (size, peak, dull, tight) => {
     const fused = fuseRipenessSignals(visual(), audio({ peakFrequencyHz: peak, knockCount: 3 }), {
       size: size as MelonSize,
     });
@@ -281,5 +266,104 @@ describe('fuseRipenessSignals boundaries', () => {
     expect(fused.confidence).toBe(60);
     expect(fused.eatFromDays).toBe(1);
     expect(fused.eatUntilDays).toBe(3);
+  });
+});
+
+function perfectVisual() {
+  return visual({
+    stripeContrastScore: 1,
+    groundSpotScore: 1,
+    dullnessScore: 1,
+    groundSpotDetected: true,
+  });
+}
+
+describe('knock hint fusion', () => {
+  it('T13 fuses a clear dull knock at half and half', () => {
+    const fused = fuseRipenessSignals(
+      perfectVisual(),
+      audio({ peakFrequencyHz: 160, peakClarity: 'clear', knockCount: 3 }),
+    );
+    expect(fused.knockHint).toBe('dull');
+    expect(fused.audioScore).toBe(80);
+    expect(fused.overallScore).toBe(90);
+    expect(fused.verdict).toBe('likely_ripe');
+  });
+
+  it('T14 caps three muddy knocks at borderline', () => {
+    const fused = fuseRipenessSignals(
+      perfectVisual(),
+      audio({ peakFrequencyHz: 160, peakClarity: 'muddy', knockCount: 3 }),
+    );
+    expect(fused.knockHint).toBe('unclear');
+    expect(fused.audioScore).toBe(50);
+    expect(fused.overallScore).toBe(67);
+    expect(fused.verdict).toBe('borderline');
+    expect(fused.summaryExplanation.startsWith('Borderline.')).toBe(true);
+    expect(fused.eatFromDays).toBe(1);
+    expect(fused.eatUntilDays).toBe(3);
+
+    const unripe = fuseRipenessSignals(
+      visual({
+        stripeContrastScore: 0.2,
+        groundSpotScore: 0.2,
+        dullnessScore: 0.2,
+        groundSpotDetected: false,
+      }),
+      audio({ peakFrequencyHz: 160, peakClarity: 'muddy', knockCount: 3 }),
+    );
+    expect(unripe.verdict).toBe('likely_unripe');
+    expect(unripe.overallScore).toBeLessThanOrEqual(46);
+  });
+
+  it('T15 caps one muddy knock at borderline', () => {
+    const fused = fuseRipenessSignals(
+      perfectVisual(),
+      audio({ peakFrequencyHz: 160, peakClarity: 'muddy', knockCount: 1 }),
+    );
+    expect(fused.audioScore).toBe(50);
+    expect(fused.overallScore).toBe(67);
+    expect(fused.verdict).toBe('borderline');
+    expect(fused.confidence).toBe(65);
+  });
+
+  it('T16 leaves a skipped knock on the photo alone', () => {
+    const fused = fuseRipenessSignals(
+      perfectVisual(),
+      audio({ knockCount: 0, peakFrequencyHz: 0, acousticRipenessScore: 0.5, peakClarity: undefined }),
+    );
+    expect(fused.overallScore).toBe(100);
+    expect(fused.verdict).toBe('likely_ripe');
+    expect(fused.knockHint).toBeUndefined();
+  });
+
+  it('T17 scores a clear tight knock without needing the cap', () => {
+    const fused = fuseRipenessSignals(
+      perfectVisual(),
+      audio({ peakFrequencyHz: 350, peakClarity: 'clear', knockCount: 3 }),
+    );
+    expect(fused.knockHint).toBe('tight');
+    expect(fused.audioScore).toBe(25);
+    expect(fused.overallScore).toBe(63);
+    expect(fused.verdict).toBe('borderline');
+  });
+
+  it('T18 keeps the two-knock and one-knock weights', () => {
+    const picture = visual({
+      stripeContrastScore: 0.6,
+      groundSpotScore: 0.6,
+      dullnessScore: 0.6,
+    });
+    const dull = audio({ peakFrequencyHz: 160, peakClarity: 'clear', acousticRipenessScore: 0.8 });
+    const two = fuseRipenessSignals(picture, { ...dull, knockCount: 2 });
+    const one = fuseRipenessSignals(picture, { ...dull, knockCount: 1 });
+    expect(two.overallScore).toBe(70);
+    expect(one.overallScore).toBe(67);
+    expect(two.verdict).toBe('likely_ripe');
+    expect(one.verdict).toBe('borderline');
+  });
+
+  it('T23 no longer exports a ripe peak band', () => {
+    expect('ripePeakMaxHz' in fusion).toBe(false);
   });
 });

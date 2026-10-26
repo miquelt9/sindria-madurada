@@ -1,8 +1,42 @@
 import { AudioFeatures } from '../types';
+import {
+  KNOCK_SEARCH_MAX_HZ,
+  KNOCK_SEARCH_MIN_HZ,
+  SECOND_PEAK_OFFSET,
+  acousticScoreFor,
+  bandForFrequency,
+  disagreementEffect,
+  isPeakMuddy,
+  knockHint,
+  knocksDisagree,
+  type PeakClarity,
+} from './knockHint';
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) return (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted[mid];
+}
+
+/** Even counts average the two middle values, then round. */
+function medianRounded(values: number[]): number {
+  return Math.round(median(values));
+}
+
+function isLocalMax(mags: Float32Array, index: number): boolean {
+  const value = mags[index];
+  if (value <= 0) return false;
+  const left = index > 0 ? mags[index - 1] : -Infinity;
+  const right = index + 1 < mags.length ? mags[index + 1] : -Infinity;
+  return value >= left && value >= right && (value > left || value > right);
+}
 
 /**
  * Computes statistical moments and features from FFT amplitude spectrum
  * Inspired directly by Abbaszadeh et al. (2013) Table 1.
+ * The knock score is the coarse hint in knockHint.ts, not a ripe-frequency bucket.
  */
 export function extractAbbaszadehFeatures(
   fftAmplitudes: Float32Array,
@@ -23,33 +57,30 @@ export function extractAbbaszadehFeatures(
   }
 
   const binSize = (sampleRate / 2) / n;
+  const mags = new Float32Array(n);
   let sum = 0;
   let sumSq = 0;
-  let maxVal = 0;
-  let maxIdx = 0;
   let weightedFreqSum = 0;
   let totalAmpForCentroid = 0;
 
-  // Band energies:
-  // Low resonant ripe band: 100 Hz to 240 Hz
-  // High unripe/tight band: 300 Hz to 750 Hz
+  // Stored ratio only. It does not change the acoustic score.
+  // Low band 110–240 Hz, upper band 320–750 Hz.
   let lowBandEnergy = 0;
   let highBandEnergy = 0;
+  const bandMags: number[] = [];
+  let peakMag = 0;
+  let peakIdx = -1;
 
   for (let i = 0; i < n; i++) {
     const val = Math.max(0, fftAmplitudes[i]);
+    mags[i] = val;
     const freq = i * binSize;
 
     sum += val;
     sumSq += val * val;
 
-    if (val > maxVal) {
-      maxVal = val;
-      maxIdx = i;
-    }
-
-    // Limit centroid calculation to 0-1000 Hz (relevant acoustic range)
-    if (freq <= 1000) {
+    // Centroid stays capped at the same 1000 Hz top as the knock search.
+    if (freq <= KNOCK_SEARCH_MAX_HZ) {
       weightedFreqSum += freq * val;
       totalAmpForCentroid += val;
     }
@@ -59,11 +90,19 @@ export function extractAbbaszadehFeatures(
     } else if (freq >= 320 && freq <= 750) {
       highBandEnergy += val * val;
     }
+
+    if (freq >= KNOCK_SEARCH_MIN_HZ && freq <= KNOCK_SEARCH_MAX_HZ) {
+      bandMags.push(val);
+      if (val > peakMag) {
+        peakMag = val;
+        peakIdx = i;
+      }
+    }
   }
 
   const mean = sum / n;
   const rmsEnergy = Math.sqrt(sumSq / n);
-  const peakFrequencyHz = Math.round(maxIdx * binSize);
+  const peakFrequencyHz = peakIdx >= 0 && peakMag > 0 ? Math.round(peakIdx * binSize) : 0;
   const spectralCentroidHz =
     totalAmpForCentroid > 0 ? Math.round(weightedFreqSum / totalAmpForCentroid) : peakFrequencyHz;
 
@@ -88,28 +127,26 @@ export function extractAbbaszadehFeatures(
   const lowMidRatio =
     highBandEnergy > 0 ? lowBandEnergy / (highBandEnergy + 0.0001) : lowBandEnergy > 0 ? 3.0 : 1.0;
 
-  // Heuristic buckets below are unchanged. They are not a sweetness measurement,
-  // and a hollow sound is not described here as a ripeness point.
-  let acousticRipenessScore = 0.5;
-
-  if (peakFrequencyHz >= 115 && peakFrequencyHz <= 210) {
-    acousticRipenessScore = 0.85;
-  } else if (peakFrequencyHz > 210 && peakFrequencyHz <= 320) {
-    // Borderline / smaller melon pitch
-    acousticRipenessScore = 0.60;
-  } else if (peakFrequencyHz > 320) {
-    // High pitched tight/unripe ping
-    acousticRipenessScore = 0.25;
-  } else if (peakFrequencyHz < 95 && peakFrequencyHz > 40) {
-    acousticRipenessScore = 0.45;
+  let secondPeak = 0;
+  if (peakIdx >= 0 && peakMag > 0) {
+    const peakFreq = peakIdx * binSize;
+    const nearLow = peakFreq * (1 - SECOND_PEAK_OFFSET);
+    const nearHigh = peakFreq * (1 + SECOND_PEAK_OFFSET);
+    for (let i = 0; i < n; i++) {
+      if (i === peakIdx) continue;
+      const freq = i * binSize;
+      if (freq < KNOCK_SEARCH_MIN_HZ || freq > KNOCK_SEARCH_MAX_HZ) continue;
+      if (freq >= nearLow && freq <= nearHigh) continue;
+      if (!isLocalMax(mags, i)) continue;
+      if (mags[i] > secondPeak) secondPeak = mags[i];
+    }
   }
 
-  // Adjust score with low/high energy ratio
-  if (lowMidRatio > 1.5) {
-    acousticRipenessScore = Math.min(1.0, acousticRipenessScore + 0.1);
-  } else if (lowMidRatio < 0.6) {
-    acousticRipenessScore = Math.max(0.0, acousticRipenessScore - 0.15);
-  }
+  const prominence = peakMag / Math.max(median(bandMags), 1e-9);
+  const secondPeakRatio = peakMag > 0 ? secondPeak / peakMag : 0;
+  const peakClarity: PeakClarity = isPeakMuddy(prominence, secondPeakRatio) ? 'muddy' : 'clear';
+  const hint = bandForFrequency(peakFrequencyHz);
+  const acousticRipenessScore = acousticScoreFor(peakClarity, hint);
 
   return {
     peakFrequencyHz,
@@ -119,12 +156,14 @@ export function extractAbbaszadehFeatures(
     skewness,
     kurtosis,
     lowMidRatio: Number(lowMidRatio.toFixed(2)),
+    peakClarity,
     acousticRipenessScore: Number(acousticRipenessScore.toFixed(2)),
   };
 }
 
 /**
- * Multi-knock aggregator: takes up to 3 detected knocks and aggregates features
+ * Multi-knock aggregator: takes up to 3 detected knocks and aggregates features.
+ * Peak frequency is the median of the knocks that count, not the mean.
  */
 export function aggregateKnockFeatures(knocks: Float32Array[], sampleRate: number): AudioFeatures {
   if (knocks.length === 0) {
@@ -144,10 +183,25 @@ export function aggregateKnockFeatures(knocks: Float32Array[], sampleRate: numbe
 
   const featureList = knocks.map((k) => extractAbbaszadehFeatures(k, sampleRate));
 
-  // Average scalar metrics
-  const avgPeak = Math.round(
-    featureList.reduce((acc, f) => acc + f.peakFrequencyHz, 0) / featureList.length
-  );
+  const clearPeaks: number[] = [];
+  const allPeaks: number[] = [];
+  let muddyCount = 0;
+  for (const feature of featureList) {
+    allPeaks.push(feature.peakFrequencyHz);
+    if (feature.peakClarity === 'muddy') muddyCount += 1;
+    else clearPeaks.push(feature.peakFrequencyHz);
+  }
+  const clearCount = clearPeaks.length;
+
+  // Only consumer of KNOCK_DISAGREEMENT_POLICY. 'borderline' marks the set muddy
+  // so fusion can cap it. 'retry' is not handled: do not route it to the weak-tap
+  // retry from anywhere else.
+  const disagreement = disagreementEffect(knocksDisagree(clearPeaks));
+  const peakClarity: PeakClarity =
+    muddyCount >= clearCount || disagreement === 'muddy' ? 'muddy' : 'clear';
+  const knockPeaksHz = clearPeaks.length > 0 ? clearPeaks : allPeaks;
+  const peakFrequencyHz = medianRounded(knockPeaksHz);
+
   const avgRms = featureList.reduce((acc, f) => acc + f.rmsEnergy, 0) / featureList.length;
   const avgCentroid = Math.round(
     featureList.reduce((acc, f) => acc + f.spectralCentroidHz, 0) / featureList.length
@@ -156,30 +210,36 @@ export function aggregateKnockFeatures(knocks: Float32Array[], sampleRate: numbe
   const avgSkew = featureList.reduce((acc, f) => acc + f.skewness, 0) / featureList.length;
   const avgKurt = featureList.reduce((acc, f) => acc + f.kurtosis, 0) / featureList.length;
   const avgRatio = featureList.reduce((acc, f) => acc + f.lowMidRatio, 0) / featureList.length;
-  const avgScore =
-    featureList.reduce((acc, f) => acc + f.acousticRipenessScore, 0) / featureList.length;
+
+  const reading = knockHint({
+    peakFrequencyHz,
+    peakClarity,
+    knockCount: knocks.length,
+  });
 
   const notes: string[] = [];
   notes.push(`Analyzed ${knocks.length} distinct knock sample${knocks.length > 1 ? 's' : ''}`);
 
-  if (avgPeak >= 115 && avgPeak <= 210) {
+  if (reading.hint === 'dull') {
     notes.push('Firmness cue from these knocks: dull rather than tight. Not more bass, and not a sweetness reading.');
-  } else if (avgPeak > 280) {
+  } else if (reading.hint === 'tight') {
     notes.push('Firmness cue from these knocks: tight rather than dull. Not more bass, and not a sweetness reading.');
   } else {
     notes.push('Firmness cue from these knocks is unclear. A hollow sound is a separate warning, not a ripeness point.');
   }
 
   return {
-    peakFrequencyHz: avgPeak,
+    peakFrequencyHz,
     rmsEnergy: Number(avgRms.toFixed(4)),
     spectralCentroidHz: avgCentroid,
     amplitudeStdDev: Number(avgStd.toFixed(4)),
     skewness: Number(avgSkew.toFixed(3)),
     kurtosis: Number(avgKurt.toFixed(3)),
     lowMidRatio: Number(avgRatio.toFixed(2)),
+    peakClarity,
+    knockPeaksHz,
     knockCount: knocks.length,
-    acousticRipenessScore: Number(avgScore.toFixed(2)),
+    acousticRipenessScore: Number(reading.score.toFixed(2)),
     notes,
   };
 }
