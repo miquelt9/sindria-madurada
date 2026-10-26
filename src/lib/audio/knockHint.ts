@@ -73,17 +73,6 @@ export const SCORE_MUDDY = 0.5;
 export type KnockHintBand = 'dull' | 'unclear' | 'tight';
 export type PeakClarity = 'clear' | 'muddy';
 
-/**
- * What to do when clear knocks span both dull and tight (medium edges).
- * 'borderline' (default): treat the set as muddy so fusion caps the verdict.
- * 'retry': reserved for Miquel. Not wired to the weak-tap retry in this PR.
- * Flip this constant only — the decision is applied in one place
- * (`disagreementEffect`, consumed by `aggregateKnockFeatures`).
- */
-export const KNOCK_DISAGREEMENT_POLICY: 'borderline' | 'retry' = 'borderline';
-
-export type DisagreementEffect = 'none' | 'muddy' | 'retry';
-
 export function bandForFrequency(peakHz: number, size?: MelonSize): KnockHintBand {
   const scale = size === 'small' ? SMALL_EDGE_SCALE : 1;
   const dullMin = Math.round(DULL_MIN_HZ * scale);
@@ -121,12 +110,14 @@ export function knocksDisagree(clearPeaksHz: readonly number[]): boolean {
 }
 
 /**
- * Single switch for knock disagreement.
- * 'retry' is returned and then ignored: the weak-tap retry is not extended here.
+ * Interim seam for clear knocks that span both dull and tight.
+ * Returns 'muddy' so fusion caps the verdict at borderline.
+ * The keep-tapping confidence follow-up replaces this function.
+ * Detection stays in knocksDisagree().
  */
-export function disagreementEffect(disagree: boolean): DisagreementEffect {
-  if (!disagree) return 'none';
-  return KNOCK_DISAGREEMENT_POLICY === 'borderline' ? 'muddy' : 'retry';
+export function resolveKnockDisagreement(disagree: boolean): 'muddy' | null {
+  if (!disagree) return null;
+  return 'muddy';
 }
 
 export interface KnockHintInput {

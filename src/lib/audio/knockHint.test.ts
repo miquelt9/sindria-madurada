@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  KNOCK_DISAGREEMENT_POLICY,
-  disagreementEffect,
   knockHint,
   knocksDisagree,
+  resolveKnockDisagreement,
   type KnockHintInput,
 } from './knockHint';
 import type { MelonSize } from '../types';
@@ -49,14 +48,16 @@ describe('knockHint', () => {
     expect(muddy.score).toBe(0.5);
   });
 
-  it('defaults knock disagreement to the borderline cap', () => {
-    expect(KNOCK_DISAGREEMENT_POLICY).toBe('borderline');
+  it('detects clear knocks that span dull and tight', () => {
     expect(knocksDisagree([150, 160, 350])).toBe(true);
     expect(knocksDisagree([150, 160, 250])).toBe(false);
     expect(knocksDisagree([250, 350])).toBe(false);
     expect(knocksDisagree([100, 350])).toBe(false);
-    expect(disagreementEffect(true)).toBe('muddy');
-    expect(disagreementEffect(false)).toBe('none');
+  });
+
+  it('treats disagreement as muddy until the keep-tapping follow-up', () => {
+    expect(resolveKnockDisagreement(true)).toBe('muddy');
+    expect(resolveKnockDisagreement(false)).toBeNull();
   });
 
   it('returns no hint when no knocks were counted', () => {

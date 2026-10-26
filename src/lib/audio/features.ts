@@ -5,10 +5,10 @@ import {
   SECOND_PEAK_OFFSET,
   acousticScoreFor,
   bandForFrequency,
-  disagreementEffect,
   isPeakMuddy,
   knockHint,
   knocksDisagree,
+  resolveKnockDisagreement,
   type PeakClarity,
 } from './knockHint';
 
@@ -193,10 +193,7 @@ export function aggregateKnockFeatures(knocks: Float32Array[], sampleRate: numbe
   }
   const clearCount = clearPeaks.length;
 
-  // Only consumer of KNOCK_DISAGREEMENT_POLICY. 'borderline' marks the set muddy
-  // so fusion can cap it. 'retry' is not handled: do not route it to the weak-tap
-  // retry from anywhere else.
-  const disagreement = disagreementEffect(knocksDisagree(clearPeaks));
+  const disagreement = resolveKnockDisagreement(knocksDisagree(clearPeaks));
   const peakClarity: PeakClarity =
     muddyCount >= clearCount || disagreement === 'muddy' ? 'muddy' : 'clear';
   const knockPeaksHz = clearPeaks.length > 0 ? clearPeaks : allPeaks;
