@@ -4,23 +4,9 @@ import {
   RipenessResult,
   RipenessVerdict,
   FusionInputs,
-  MelonSize,
 } from '../types';
+import { knockHint } from '../audio/knockHint';
 import { eatingWindowForVerdict } from './eatingWindow';
-
-/** Default ripe knock band (Hz). Small fruit resonates a bit higher. */
-const RIPE_PEAK_MIN_HZ = 115;
-const RIPE_PEAK_MAX_HZ = 210;
-const SMALL_MELON_RIPE_PEAK_MAX_HZ = 250;
-/**
- * audio/features.ts scores 210–320 Hz as 0.60 vs 0.85 in the ripe band.
- * Lift the extended small-melon band back toward the ripe score without editing audio.
- */
-const SMALL_MELON_EXTENDED_BAND_LIFT = 0.25;
-
-export function ripePeakMaxHz(size?: MelonSize): number {
-  return size === 'small' ? SMALL_MELON_RIPE_PEAK_MAX_HZ : RIPE_PEAK_MAX_HZ;
-}
 
 function visualComposite(visual: VisualFeatures, variety: FusionInputs['variety']): number {
   if (variety === 'solid') {
@@ -34,20 +20,9 @@ function visualComposite(visual: VisualFeatures, variety: FusionInputs['variety'
   );
 }
 
-function sizeAdjustedAcousticScore(audio: AudioFeatures, size?: MelonSize): number {
-  const score = audio.acousticRipenessScore;
-  if (size !== 'small') return score;
-
-  const peak = audio.peakFrequencyHz;
-  if (peak > RIPE_PEAK_MAX_HZ && peak <= SMALL_MELON_RIPE_PEAK_MAX_HZ) {
-    return Math.min(1, score + SMALL_MELON_EXTENDED_BAND_LIFT);
-  }
-  return score;
-}
-
 /**
  * Fuses visual cues (stripe ribbons, ground spot, surface dullness)
- * and acoustic knocking cues (resonance peak, low/mid ratio, Abbaszadeh moments)
+ * and acoustic knocking cues (coarse knock hint, Abbaszadeh moments)
  * into a transparent, honest consumer score.
  */
 export function fuseRipenessSignals(
@@ -61,7 +36,8 @@ export function fuseRipenessSignals(
   const visualScoreRaw = visualComposite(visual, variety);
   const visualScore = Math.round(visualScoreRaw * 100);
 
-  const acousticScore = sizeAdjustedAcousticScore(audio, size);
+  const reading = knockHint(audio, size);
+  const acousticScore = audio.knockCount > 0 ? reading.score : audio.acousticRipenessScore;
   const audioScore = Math.round(acousticScore * 100);
 
   // Fusion weighting is a product choice, not a result from any paper.
@@ -81,7 +57,13 @@ export function fuseRipenessSignals(
     confidence = visual.groundSpotDetected ? 60 : 45;
   }
 
-  const overallScore = Math.round(fusedScoreRaw * 100);
+  let overallScore = Math.round(fusedScoreRaw * 100);
+
+  // The only fusion change beyond reading the hint: a muddy peak cannot be ripe.
+  // 67 sits one point under the ripe cut so the capped score and the verdict agree.
+  if (audio.knockCount > 0 && audio.peakClarity === 'muddy') {
+    overallScore = Math.min(overallScore, 67);
+  }
 
   let verdict: RipenessVerdict;
   if (overallScore >= 68) {
@@ -118,10 +100,9 @@ export function fuseRipenessSignals(
     );
   }
 
-  const peakMax = ripePeakMaxHz(size);
-  if (audio.peakFrequencyHz > peakMax + 40) {
+  if (reading.hint === 'tight') {
     actionableTips.push('Knocks sound tight rather than dull. That is a firmness cue, not more bass.');
-  } else if (audio.peakFrequencyHz >= RIPE_PEAK_MIN_HZ && audio.peakFrequencyHz <= peakMax) {
+  } else if (reading.hint === 'dull') {
     actionableTips.push(
       size === 'small'
         ? 'Several knocks on this smaller melon sound dull rather than tight. That is a firmness cue, not more bass.'
@@ -147,6 +128,7 @@ export function fuseRipenessSignals(
     audioScore,
     visualFeatures: visual,
     audioFeatures: audio,
+    ...(reading.hint ? { knockHint: reading.hint } : {}),
     summaryExplanation,
     actionableTips,
     ...eatWindow,

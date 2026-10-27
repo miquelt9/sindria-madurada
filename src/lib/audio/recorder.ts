@@ -7,7 +7,7 @@ import {
   MAX_KNOCKS,
   WeakTapReason,
 } from './onset';
-import { AudioFeatures } from '../types';
+import { AudioFeatures, MelonSize } from '../types';
 
 type WakeLockSentinelLike = {
   released: boolean;
@@ -174,7 +174,7 @@ export class KnockRecorder {
     }
   }
 
-  stopAndAnalyze(): AudioFeatures {
+  stopAndAnalyze(size?: MelonSize): AudioFeatures {
     this.cancelPendingManualKnock();
     const sampleRate = this.audioContext?.sampleRate ?? 44100;
     const spectra = this.detector ? [...this.detector.spectra] : [];
@@ -187,7 +187,7 @@ export class KnockRecorder {
 
     void this.tearDownGraph();
 
-    return aggregateKnockFeatures(spectra, sampleRate);
+    return aggregateKnockFeatures(spectra, sampleRate, size);
   }
 
   getKnockCount(): number {

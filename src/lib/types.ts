@@ -3,7 +3,7 @@ export type TasteFeedback = 'ripe' | 'unripe' | 'overripe' | 'unrated';
 
 /** Rind pattern chip: solid cultivars must not be punished for low stripe contrast. */
 export type MelonVariety = 'striped' | 'solid';
-/** Fruit size chip: small melons use a slightly higher acceptable knock-frequency band. */
+/** Fruit size chip. Small fruit shifts the coarse knock hint up. */
 export type MelonSize = 'small' | 'medium' | 'large';
 
 /** Optional fusion inputs from the variety/size chips. */
@@ -27,7 +27,9 @@ export interface AudioFeatures {
   amplitudeStdDev: number;        // Variance in FFT amplitude (Abbaszadeh et al.)
   skewness: number;               // 3rd central moment (Abbaszadeh Table 1)
   kurtosis: number;               // 4th moment (Abbaszadeh Table 1)
-  lowMidRatio: number;            // Ratio of resonant ripe band (100-250Hz) to upper band (350-900Hz)
+  lowMidRatio: number;            // Low-band energy over upper-band energy. Stored only; it does not change the score.
+  peakClarity?: 'clear' | 'muddy'; // Set when a spectrum was scored. Legacy records omit it.
+  knockPeaksHz?: number[];        // Peaks that entered the median. Legacy records omit it.
   knockCount: number;             // Valid detected thumps (aiming for 3)
   acousticRipenessScore: number;  // 0 to 1
   notes: string[];
@@ -41,6 +43,8 @@ export interface RipenessResult {
   audioScore: number;             // 0 to 100
   visualFeatures: VisualFeatures;
   audioFeatures: AudioFeatures;
+  /** Coarse knock lean. Omitted when no knocks were counted. Muddy is stored as unclear. */
+  knockHint?: 'dull' | 'unclear' | 'tight';
   summaryExplanation: string;
   actionableTips: string[];
   /** Inclusive start of the best-to-eat window, in whole days from now. */
